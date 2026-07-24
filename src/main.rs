@@ -9,6 +9,7 @@ mod config;
 mod device;
 mod fileio;
 mod autosave;
+mod commands;
 
 use clap::{Parser, Subcommand};
 use error::Result;
@@ -106,16 +107,11 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     match cli.command {
-        Commands::List => {
-            println!("no PPK2 devices found (scanning USB...)");
-            Ok(())
-        },
-        Commands::Power { state: _ } => Err(error::Error::DeviceNotFound),
-        Commands::Mode { mode: _ } => Err(error::Error::DeviceNotFound),
-        Commands::Voltage { mv: _ } => Err(error::Error::DeviceNotFound),
-        Commands::Measure { duration: _, save: _ } => Err(error::Error::DeviceNotFound),
-        Commands::Info { file: _ } => {
-            Err(error::Error::InvalidArg("file not found".into()))
-        }
+        Commands::List => commands::list::run(cli.json),
+        Commands::Power { .. } => Ok(()),
+        Commands::Mode { .. } => Ok(()),
+        Commands::Voltage { .. } => Ok(()),
+        Commands::Measure { .. } => Ok(()),
+        Commands::Info { .. } => Ok(()),
     }
 }
