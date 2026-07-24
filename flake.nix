@@ -35,6 +35,7 @@
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath linuxLibs;
             shellHook = ''
               echo "PPK2 dev shell | Rust $(rustc --version)"
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-unknown-linux-gnu-gcc"
               export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-L ${aarch64Udev}/lib"
             '';
           };
