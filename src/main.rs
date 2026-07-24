@@ -11,6 +11,7 @@ mod fileio;
 mod autosave;
 mod trigger;
 mod firmware;
+mod daemon;
 mod commands;
 
 use clap::{Parser, Subcommand};
@@ -74,6 +75,8 @@ enum Commands {
     },
     #[command(subcommand)]
     Firmware(FirmwareCmd),
+    #[command(subcommand)]
+    Daemon(DaemonCmd),
     Recover {
         serial: Option<String>,
     },
@@ -89,6 +92,16 @@ enum Commands {
 enum FirmwareCmd {
     Info,
     Upgrade,
+}
+
+#[derive(Subcommand)]
+enum DaemonCmd {
+    Start,
+    Stop {
+        #[arg(long)]
+        save: Option<String>,
+    },
+    Status,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -194,6 +207,17 @@ fn run(cli: Cli) -> Result<()> {
                 cli.port.as_deref(),
                 cli.serial.as_deref(),
             ),
+        },
+        Commands::Daemon(cmd) => match cmd {
+            DaemonCmd::Start => {
+                commands::daemon_cmd::run_start(cli.json, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            DaemonCmd::Stop { save } => {
+                commands::daemon_cmd::run_stop(cli.json, save.as_deref(), cli.serial.as_deref())
+            }
+            DaemonCmd::Status => {
+                commands::daemon_cmd::run_status(cli.json, cli.serial.as_deref())
+            }
         },
         Commands::Recover { serial } => commands::recover::run(cli.json, serial.as_deref()),
         Commands::Convert { file, output } => {
