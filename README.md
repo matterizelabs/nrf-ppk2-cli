@@ -11,7 +11,7 @@ curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/inst
 Install a specific version:
 
 ```
-curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/install.sh | bash -s -- v0.1.1
+curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/install.sh | bash -s -- v0.1.2
 ```
 
 Default install path is `$HOME/.local/bin`. Override with `INSTALL_DIR`:
@@ -121,21 +121,24 @@ ppk2 convert capture.ppk2 --output out.csv
 
 ### Daemon
 
-Long-running background measurement:
+Long-running background measurement with realtime status:
 
 ```
-ppk2 daemon start
-ppk2 daemon status
-ppk2 daemon stop
-ppk2 daemon stop --save long_run.ppk2
+ppk2 daemon start                   # background, prints socket path + PID
+ppk2 daemon status                  # realtime stats (JSON)
+ppk2 daemon stop                    # stop and finalize autosave
+ppk2 daemon stop --save out.ppk2    # stop with named .ppk2 file
 ```
+
+Communicates via Unix socket at `~/.local/state/ppk2/<serial>/daemon.sock`.
 
 ### Firmware
 
 ```
 ppk2 firmware info
-ppk2 firmware upgrade
 ```
+
+Reads firmware version from device metadata.
 
 ### Autosave & recovery
 
