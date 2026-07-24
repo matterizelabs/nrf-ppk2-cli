@@ -10,6 +10,7 @@ mod device;
 mod fileio;
 mod autosave;
 mod trigger;
+mod firmware;
 mod commands;
 
 use clap::{Parser, Subcommand};
@@ -67,6 +68,27 @@ enum Commands {
         #[arg(long)]
         save: Option<String>,
     },
+    Report {
+        #[arg(required = true)]
+        files: Vec<String>,
+    },
+    #[command(subcommand)]
+    Firmware(FirmwareCmd),
+    Recover {
+        serial: Option<String>,
+    },
+    Convert {
+        #[arg(required = true)]
+        file: String,
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum FirmwareCmd {
+    Info,
+    Upgrade,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -162,5 +184,28 @@ fn run(cli: Cli) -> Result<()> {
             cli.port.as_deref(),
             cli.serial.as_deref(),
         ),
+        Commands::Report { files } => commands::report::run(cli.json, &files),
+        Commands::Firmware(cmd) => match cmd {
+            FirmwareCmd::Info => {
+                commands::firmware_cmd::run_info(cli.json, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            FirmwareCmd::Upgrade => commands::firmware_cmd::run_upgrade(
+                cli.json,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
+        },
+        Commands::Recover { serial } => commands::recover::run(cli.json, serial.as_deref()),
+        Commands::Convert { file, output } => {
+            let out = output.unwrap_or_else(|| {
+                let f = file.clone();
+                if f.ends_with(".ppk2") {
+                    f.replace(".ppk2", ".csv")
+                } else {
+                    f + ".csv"
+                }
+            });
+            crate::fileio::export_csv(&file, &out)
+        }
     }
 }
