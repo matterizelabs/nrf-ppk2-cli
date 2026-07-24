@@ -5,6 +5,7 @@ mod transport;
 mod parser;
 mod conversion;
 mod metadata;
+mod config;
 
 use clap::{Parser, Subcommand};
 use error::Result;
