@@ -24,7 +24,7 @@
               toolchain.toolchain
               pkgs.pkg-config
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
-              pkgs.libudev-zero
+              pkgs.udev
             ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
               pkgs.darwin.apple_sdk.frameworks.IOKit
               pkgs.darwin.apple_sdk.frameworks.Foundation
