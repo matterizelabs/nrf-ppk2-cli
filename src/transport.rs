@@ -1,5 +1,14 @@
+use std::path::Path;
+
 use crate::error::{Error, Result};
-use serialport::{available_ports, SerialPort, SerialPortInfo, SerialPortType};
+use serialport::{available_ports, SerialPort, SerialPortType, UsbPortInfo};
+
+#[derive(Debug, Clone)]
+pub struct Ppk2DeviceInfo {
+    pub serial: String,
+    pub control_port: String,
+    pub data_port: Option<String>,
+}
 
 pub struct Ppk2Port {
     pub(crate) inner: Box<dyn SerialPort>,
@@ -69,16 +78,56 @@ impl Ppk2Port {
     }
 }
 
-fn is_ppk2_port(port: &SerialPortInfo) -> bool {
-    match &port.port_type {
-        SerialPortType::UsbPort(info) => info.vid == 0x1915 && info.pid == 0xC00A,
-        _ => false,
+fn read_sysfs_serial(path: &str) -> Option<String> {
+    let name = Path::new(path).file_name()?.to_str()?;
+    let serial_path = format!("/sys/class/tty/{}/device/serial", name);
+    std::fs::read_to_string(&serial_path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn read_sysfs_iface(path: &str) -> Option<u32> {
+    let name = Path::new(path).file_name()?.to_str()?;
+    let iface_path = format!("/sys/class/tty/{}/device/bInterfaceNumber", name);
+    let content = std::fs::read_to_string(&iface_path).ok()?;
+    u32::from_str_radix(content.trim(), 16).ok()
+}
+
+fn resolve_serial(info: &UsbPortInfo, path: &str) -> String {
+    if let Some(ref sn) = info.serial_number {
+        if !sn.is_empty() {
+            return sn.clone();
+        }
     }
+    if let Some(sn) = read_sysfs_serial(path) {
+        return sn;
+    }
+    if let Some(sn) = extract_serial(path) {
+        return sn;
+    }
+    "unknown".to_string()
+}
+
+fn resolve_iface(path: &str) -> u32 {
+    if let Some(iface) = read_sysfs_iface(path) {
+        return iface;
+    }
+    if let Some(iface) = extract_iface_from_path(path) {
+        return iface;
+    }
+    // Fallback: use ACM number as heuristic
+    if let Some(name) = Path::new(path).file_name().and_then(|n| n.to_str()) {
+        if let Some(rest) = name.strip_prefix("ttyACM") {
+            if let Ok(n) = rest.parse::<u32>() {
+                return n;
+            }
+        }
+    }
+    99
 }
 
 fn extract_serial(path: &str) -> Option<String> {
-    // /dev/serial/by-id/usb-Nordic_Semiconductor_PPK2_682294737-if01
-    // /dev/cu.usbmodem6822947371
     if path.contains("PPK2_") {
         if let Some(s) = path.split("PPK2_").nth(1) {
             let sn = s.split('-').next().unwrap_or(s);
@@ -89,7 +138,7 @@ fn extract_serial(path: &str) -> Option<String> {
         if let Some(s) = path.split("usbmodem").nth(1) {
             let mut digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
             if digits.len() > 1 {
-                digits.pop(); // strip trailing interface number
+                digits.pop();
             }
             if !digits.is_empty() {
                 return Some(digits);
@@ -99,23 +148,58 @@ fn extract_serial(path: &str) -> Option<String> {
     None
 }
 
-pub fn find_ppk2_ports() -> Vec<(String, String)> {
-    let mut result = Vec::new();
+fn extract_iface_from_path(path: &str) -> Option<u32> {
+    if let Some(by_id_seg) = path.split("PPK2_").nth(1) {
+        if let Some(iface_str) = by_id_seg.rsplit("-if").next() {
+            return u32::from_str_radix(iface_str, 16).ok();
+        }
+    }
+    if let Some(usbmodem_seg) = path.split("usbmodem").nth(1) {
+        if let Some(last_char) = usbmodem_seg.chars().last() {
+            if let Some(d) = last_char.to_digit(10) {
+                return Some(d);
+            }
+        }
+    }
+    None
+}
+
+pub fn find_ppk2_ports() -> Vec<Ppk2DeviceInfo> {
+    use std::collections::BTreeMap;
+
     let ports = available_ports().unwrap_or_default();
+    let mut raw: Vec<(String, String, u32)> = Vec::new();
 
     for port in &ports {
-        if is_ppk2_port(port) {
-            let serial = extract_serial(&port.port_name).unwrap_or_else(|| "unknown".to_string());
-            result.push((serial, port.port_name.clone()));
+        if let SerialPortType::UsbPort(ref info) = port.port_type {
+            if info.vid == 0x1915 && info.pid == 0xC00A {
+                let serial = resolve_serial(info, &port.port_name);
+                let iface = resolve_iface(&port.port_name);
+                raw.push((serial, port.port_name.clone(), iface));
+            }
         }
     }
 
-    // Sort: prefer by-id paths first
-    result.sort_by(|a, b| {
-        let a_by_id = a.1.contains("/by-id/");
-        let b_by_id = b.1.contains("/by-id/");
-        b_by_id.cmp(&a_by_id)
-    });
+    let mut groups: BTreeMap<String, Vec<(String, u32)>> = BTreeMap::new();
+    for (serial, path, iface) in raw {
+        groups.entry(serial).or_default().push((path, iface));
+    }
+
+    let mut result = Vec::new();
+    for (serial, mut entries) in groups {
+        entries.sort_by_key(|(_, iface)| *iface);
+        let control_port = entries[0].0.clone();
+        let data_port = if entries.len() > 1 {
+            Some(entries[1].0.clone())
+        } else {
+            None
+        };
+        result.push(Ppk2DeviceInfo {
+            serial,
+            control_port,
+            data_port,
+        });
+    }
 
     result
 }
@@ -126,16 +210,16 @@ pub fn resolve_port(port: Option<&str>, serial: Option<&str>) -> Result<String> 
     }
     let devices = find_ppk2_ports();
     if let Some(sn) = serial {
-        for (dev_sn, path) in &devices {
-            if dev_sn == sn {
-                return Ok(path.clone());
+        for dev in &devices {
+            if dev.serial == sn {
+                return Ok(dev.control_port.clone());
             }
         }
         return Err(Error::DeviceNotFound);
     }
     devices
         .first()
-        .map(|(_, path)| path.clone())
+        .map(|d| d.control_port.clone())
         .ok_or(Error::DeviceNotFound)
 }
 

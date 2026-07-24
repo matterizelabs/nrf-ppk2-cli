@@ -7,15 +7,31 @@ pub fn run(json: bool) -> Result<()> {
     if json {
         let entries: Vec<String> = devices
             .iter()
-            .map(|(sn, path)| format!(r#"{{"serial":"{}","path":"{}"}}"#, sn, path))
+            .map(|d| {
+                format!(
+                    r#"{{"serial":"{}","control":"{}","data":{}}}"#,
+                    d.serial,
+                    d.control_port,
+                    match &d.data_port {
+                        Some(dp) => format!(r#""{}""#, dp),
+                        None => "null".to_string(),
+                    }
+                )
+            })
             .collect();
         println!("[{}]", entries.join(","));
     } else {
         if devices.is_empty() {
             println!("no PPK2 devices found");
+            return Ok(());
         }
-        for (sn, path) in &devices {
-            println!("{}  {}", sn, path);
+        let sn_w = devices.iter().map(|d| d.serial.len()).max().unwrap_or(7);
+        for d in &devices {
+            let dp = d.data_port.as_deref().unwrap_or("-");
+            println!(
+                "{:<sn_w$}  control={}  data={}",
+                d.serial, d.control_port, dp,
+            );
         }
     }
 
