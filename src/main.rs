@@ -2,6 +2,8 @@ mod error;
 mod types;
 mod protocol;
 mod transport;
+mod parser;
+mod metadata;
 
 use clap::{Parser, Subcommand};
 use error::Result;
