@@ -61,7 +61,15 @@ pub fn run(
     };
     let mut engine = TriggerEngine::new(trigger_config);
 
-    let serial_str = serial.unwrap_or("unknown").to_string();
+    let serial_str = serial
+        .map(|s| s.to_string())
+        .or_else(|| {
+            crate::transport::find_ppk2_ports()
+                .into_iter()
+                .find(|d| d.control_port == port_path)
+                .map(|d| d.serial)
+        })
+        .unwrap_or_else(|| "unknown".to_string());
     let mut autosave = if save.is_some() || config.autosave.enabled {
         Some(Autosave::new(&serial_str, &config.autosave)?)
     } else {
@@ -75,6 +83,7 @@ pub fn run(
     let mut min: f64 = f64::MAX;
     let mut max: f64 = f64::MIN;
     let mut triggered = false;
+    let mut saved_path: Option<String> = None;
 
     loop {
         if !running.load(Ordering::SeqCst) {
@@ -105,7 +114,7 @@ pub fn run(
                     {
                         if let Some(ref mut asv) = autosave {
                             asv.push((ua as f32, sample.logic));
-                            asv.maybe_flush().ok();
+                            asv.maybe_flush();
                         }
                     }
                 }
@@ -114,7 +123,7 @@ pub fn run(
             Err(Error::Disconnected(_)) => {
                 let elapsed = start.elapsed().as_secs_f64();
                 if let Some(asv) = autosave.take() {
-                    asv.finalize(save)?;
+                    let _ = asv.finalize(save)?;
                 }
                 return Err(Error::PartialCapture {
                     samples: count,
@@ -132,7 +141,7 @@ pub fn run(
     }
 
     if let Some(asv) = autosave.take() {
-        asv.finalize(save)?;
+        saved_path = Some(asv.finalize(save)?);
     }
 
     let elapsed = start.elapsed().as_secs_f64();
@@ -169,6 +178,9 @@ pub fn run(
             max_ua: if max == f64::MIN { 0.0 } else { max },
         };
         println!("{}", stats.to_json());
+        if let Some(ref p) = saved_path {
+            eprintln!("saved {}", p);
+        }
     } else {
         let power_str = power
             .map(|p| format!("{:.0}uW", p))
@@ -181,6 +193,9 @@ pub fn run(
             avg,
             power_str,
         );
+        if let Some(ref p) = saved_path {
+            println!("saved {}", p);
+        }
     }
 
     if parser.lost_samples() > 0 {

@@ -1,6 +1,8 @@
+use std::fmt::Write as _;
+use std::io::Write;
+
 use crate::conversion::convert_bits16;
 use crate::error::Result;
-use std::io::Write;
 
 pub fn write_ppk2(path: &str, frames: &[(f32, u8)], start_time_ms: u64) -> Result<()> {
     let file = std::fs::File::create(path)?;
@@ -23,38 +25,44 @@ pub fn write_ppk2(path: &str, frames: &[(f32, u8)], start_time_ms: u64) -> Resul
     zip.start_file("metadata.json", options)?;
     zip.write_all(metadata.as_bytes())?;
 
-    let step = (frames.len() / 10_000).max(1);
-    let mut minimap_data = String::from("[");
-    let mut first = true;
-    for chunk in frames.chunks(step) {
-        let min_na = chunk
-            .iter()
-            .map(|(ua, _)| (ua * 1000.0) as i64)
-            .min()
-            .unwrap_or(0)
-            .max(200);
-        let max_na = chunk
-            .iter()
-            .map(|(ua, _)| (ua * 1000.0) as i64)
-            .max()
-            .unwrap_or(0)
-            .max(200);
-        if !first {
-            minimap_data.push(',');
-        }
-        first = false;
-        minimap_data.push_str(&format!(r#"{{"min":{},"max":{}}}"#, min_na, max_na));
-    }
-    minimap_data.push(']');
-    let minimap = format!(
-        r#"{{"lastElementFoldCount":0,"maxNumberOfElements":10000,"numberOfTimesToFold":1,"data":{}}}"#,
-        minimap_data,
-    );
     zip.start_file("minimap.json", options)?;
-    zip.write_all(minimap.as_bytes())?;
+    zip.write_all(build_minimap(frames).as_bytes())?;
 
     zip.finish()?;
     Ok(())
+}
+
+fn build_minimap(frames: &[(f32, u8)]) -> String {
+    let step = (frames.len() / 10_000).max(1);
+    let entries = frames.len() / step + usize::from(!frames.len().is_multiple_of(step));
+    let mut buf = String::with_capacity(entries * 32 + 100);
+    buf.push('[');
+    let mut first = true;
+    for chunk in frames.chunks(step) {
+        let mut min_na = i64::MAX;
+        let mut max_na = i64::MIN;
+        for &(ua, _) in chunk {
+            let na = (ua as f64 * 1000.0) as i64;
+            if na < min_na {
+                min_na = na;
+            }
+            if na > max_na {
+                max_na = na;
+            }
+        }
+        let min_na = min_na.max(200);
+        let max_na = max_na.max(200);
+        if !first {
+            buf.push(',');
+        }
+        first = false;
+        let _ = write!(buf, r#"{{"min":{},"max":{}}}"#, min_na, max_na);
+    }
+    buf.push(']');
+    format!(
+        r#"{{"lastElementFoldCount":0,"maxNumberOfElements":10000,"numberOfTimesToFold":1,"data":{}}}"#,
+        buf,
+    )
 }
 
 pub fn read_ppk2(path: &str) -> Result<Vec<(f32, u8)>> {

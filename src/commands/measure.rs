@@ -48,6 +48,12 @@ pub fn run(
 
     let serial = serial
         .map(|s| s.to_string())
+        .or_else(|| {
+            crate::transport::find_ppk2_ports()
+                .into_iter()
+                .find(|d| d.control_port == port_path)
+                .map(|d| d.serial)
+        })
         .unwrap_or_else(|| "unknown".to_string());
     let mut autosave = if save.is_some() || config.autosave.enabled {
         Some(Autosave::new(&serial, &config.autosave)?)
@@ -59,6 +65,7 @@ pub fn run(
     let mut sum: f64 = 0.0;
     let mut min: f64 = f64::MAX;
     let mut max: f64 = f64::MIN;
+    let mut saved_path: Option<String> = None;
 
     let mut parser = crate::parser::SampleParser::new();
     let mut last_report = Instant::now();
@@ -90,7 +97,7 @@ pub fn run(
 
                     if let Some(ref mut asv) = autosave {
                         asv.push((ua as f32, sample.logic));
-                        asv.maybe_flush().ok();
+                        asv.maybe_flush();
                     }
                 }
             }
@@ -98,7 +105,7 @@ pub fn run(
             Err(Error::Disconnected(_)) => {
                 let elapsed = start.elapsed().as_secs_f64();
                 if let Some(asv) = autosave.take() {
-                    asv.finalize(save)?;
+                    let _ = asv.finalize(save)?;
                 }
                 return Err(Error::PartialCapture {
                     samples: count,
@@ -112,7 +119,7 @@ pub fn run(
             let elapsed = start.elapsed().as_secs_f64();
             let avg = if count > 0 { sum / count as f64 } else { 0.0 };
             let (v, unit) = format_current(avg);
-            let mut line = format!("{:.1}s  avg {:.1}{}  #{}", elapsed, v, unit, count);
+            let mut line = format!("{:.1}s  avg {:.1}{}", elapsed, v, unit);
             if let crate::types::MeasurementMode::Source = device.current_mode() {
                 let pw = device.vdd_mv() as f64 * avg / 1000.0;
                 let (pv, punit) = format_power(pw);
@@ -152,7 +159,7 @@ pub fn run(
     }
 
     if let Some(asv) = autosave.take() {
-        asv.finalize(save)?;
+        saved_path = Some(asv.finalize(save)?);
     }
 
     if !json {
@@ -170,6 +177,9 @@ pub fn run(
             max_ua: if max == f64::MIN { 0.0 } else { max },
         };
         println!("{}", stats.to_json());
+        if let Some(ref p) = saved_path {
+            eprintln!("saved {}", p);
+        }
     } else {
         let power_str = power
             .map(|p| format!("{:.0}uW", p))
@@ -178,6 +188,9 @@ pub fn run(
             "duration {:.1}s  samples {}  avg {:.1}uA  charge {:.3}uAh  power {}",
             elapsed, count, avg, charge, power_str,
         );
+        if let Some(ref p) = saved_path {
+            println!("saved {}", p);
+        }
     }
 
     if parser.lost_samples() > 0 {

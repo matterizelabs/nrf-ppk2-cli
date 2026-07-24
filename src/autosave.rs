@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::thread::JoinHandle;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::config::AutosaveConfig;
 use crate::error::Result;
 use crate::fileio;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Autosave {
     path: PathBuf,
@@ -11,6 +14,8 @@ pub struct Autosave {
     last_flush_count: usize,
     total_frames: usize,
     frames: Vec<(f32, u8)>,
+    chunks: Vec<Arc<Vec<(f32, u8)>>>,
+    writer: Option<JoinHandle<()>>,
 }
 
 impl Autosave {
@@ -36,6 +41,8 @@ impl Autosave {
             last_flush_count: 0,
             total_frames: 0,
             frames: Vec::new(),
+            chunks: Vec::new(),
+            writer: None,
         })
     }
 
@@ -44,36 +51,54 @@ impl Autosave {
         self.total_frames += 1;
     }
 
-    pub fn maybe_flush(&mut self) -> Result<()> {
+    pub fn maybe_flush(&mut self) {
         if !self.enabled {
-            return Ok(());
+            return;
         }
         let since = self.total_frames - self.last_flush_count;
-        if since >= (100_000 * self.interval_s as usize) {
-            self.do_flush()?;
+        if since < (100_000 * self.interval_s as usize) {
+            return;
         }
-        Ok(())
-    }
-
-    fn do_flush(&mut self) -> Result<()> {
-        fileio::write_ppk2(
-            self.path.to_str().unwrap_or("autosave.ppk2"),
-            &self.frames,
-            0,
-        )?;
+        if let Some(ref h) = self.writer {
+            if !h.is_finished() {
+                return;
+            }
+            self.writer = None;
+        }
+        let chunk = Arc::new(std::mem::take(&mut self.frames));
+        self.chunks.push(Arc::clone(&chunk));
         self.last_flush_count = self.total_frames;
-        Ok(())
+        let path = self.path.clone();
+        let handle = std::thread::spawn(move || {
+            let _ = fileio::write_ppk2(path.to_str().unwrap_or("autosave.ppk2"), &chunk, 0);
+        });
+        self.writer = Some(handle);
     }
 
-    pub fn finalize(mut self, save_path: Option<&str>) -> Result<()> {
-        self.do_flush()?;
+    fn join_writer(&mut self) {
+        if let Some(h) = self.writer.take() {
+            let _ = h.join();
+        }
+    }
 
+    pub fn finalize(mut self, save_path: Option<&str>) -> Result<String> {
+        self.join_writer();
+
+        let total: usize = self.chunks.iter().map(|c| c.len()).sum::<usize>() + self.frames.len();
+        let mut all = Vec::with_capacity(total);
+        for chunk in &self.chunks {
+            all.extend_from_slice(chunk);
+        }
+        all.extend_from_slice(&self.frames);
+
+        fileio::write_ppk2(self.path.to_str().unwrap_or("autosave.ppk2"), &all, 0)?;
         if let Some(sp) = save_path {
             std::fs::copy(&self.path, sp)?;
             let _ = std::fs::remove_file(&self.path);
+            Ok(sp.to_string())
+        } else {
+            Ok(self.path.to_string_lossy().to_string())
         }
-
-        Ok(())
     }
 
     pub fn recover(base_dir: &PathBuf) -> Result<Vec<String>> {
