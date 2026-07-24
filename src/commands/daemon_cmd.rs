@@ -1,6 +1,6 @@
+use crate::daemon;
 use crate::error::Result;
 use crate::transport::resolve_port;
-use crate::daemon;
 
 pub fn run_start(_json: bool, port: Option<&str>, serial: Option<&str>) -> Result<()> {
     let port_path = resolve_port(port, serial)?;
@@ -16,7 +16,11 @@ pub fn run_stop(json: bool, save: Option<&str>, serial: Option<&str>) -> Result<
         r#"{"cmd":"stop"}"#.to_string()
     };
     let resp = daemon::send_command(sn, &cmd)?;
-    if json { println!("{}", resp); } else { println!("daemon stopped"); }
+    if json {
+        println!("{}", resp);
+    } else {
+        println!("daemon stopped");
+    }
     Ok(())
 }
 

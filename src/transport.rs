@@ -11,8 +11,8 @@ impl Ppk2Port {
             .timeout(std::time::Duration::from_secs(2))
             .open()
             .map_err(|e| {
-                let is_perm = e.kind()
-                    == serialport::ErrorKind::Io(std::io::ErrorKind::PermissionDenied);
+                let is_perm =
+                    e.kind() == serialport::ErrorKind::Io(std::io::ErrorKind::PermissionDenied);
                 if is_perm {
                     Error::InvalidArg(format!(
                         "{}: permission denied (try adding user to dialout group)",
@@ -59,17 +59,19 @@ impl Ppk2Port {
 
     pub fn drain_input(&mut self) {
         let mut buf = [0u8; 256];
-        self.inner.set_timeout(std::time::Duration::from_millis(10)).ok();
+        self.inner
+            .set_timeout(std::time::Duration::from_millis(10))
+            .ok();
         while self.inner.read(&mut buf).is_ok_and(|n| n > 0) {}
-        self.inner.set_timeout(std::time::Duration::from_secs(2)).ok();
+        self.inner
+            .set_timeout(std::time::Duration::from_secs(2))
+            .ok();
     }
 }
 
 fn is_ppk2_port(port: &SerialPortInfo) -> bool {
     match &port.port_type {
-        SerialPortType::UsbPort(info) => {
-            info.vid == 0x1915 && info.pid == 0xC00A
-        }
+        SerialPortType::UsbPort(info) => info.vid == 0x1915 && info.pid == 0xC00A,
         _ => false,
     }
 }
@@ -103,8 +105,7 @@ pub fn find_ppk2_ports() -> Vec<(String, String)> {
 
     for port in &ports {
         if is_ppk2_port(port) {
-            let serial = extract_serial(&port.port_name)
-                .unwrap_or_else(|| "unknown".to_string());
+            let serial = extract_serial(&port.port_name).unwrap_or_else(|| "unknown".to_string());
             result.push((serial, port.port_name.clone()));
         }
     }
@@ -144,9 +145,7 @@ mod tests {
 
     #[test]
     fn extract_serial_by_id() {
-        let sn = extract_serial(
-            "/dev/serial/by-id/usb-Nordic_Semiconductor_PPK2_682294737-if01"
-        );
+        let sn = extract_serial("/dev/serial/by-id/usb-Nordic_Semiconductor_PPK2_682294737-if01");
         assert_eq!(sn, Some("682294737".to_string()));
     }
 

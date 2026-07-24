@@ -2,7 +2,13 @@ use crate::device::Ppk2Device;
 use crate::error::{Error, Result};
 use crate::transport::resolve_port;
 
-pub fn run(json: bool, range: u8, ohms: f32, port: Option<&str>, serial: Option<&str>) -> Result<()> {
+pub fn run(
+    json: bool,
+    range: u8,
+    ohms: f32,
+    port: Option<&str>,
+    serial: Option<&str>,
+) -> Result<()> {
     if range > 4 {
         return Err(Error::InvalidArg("range must be 0-4".into()));
     }

@@ -1,8 +1,8 @@
 #[cfg(unix)]
 mod unix {
+    use crate::config::Config;
     use crate::device::Ppk2Device;
     use crate::error::Result;
-    use crate::config::Config;
     use std::io::{BufRead, BufReader, Write};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::path::PathBuf;
@@ -48,7 +48,10 @@ mod windows {
     }
 
     pub fn run_daemon(port_path: &str, serial: &str) -> Result<()> {
-        println!("daemon mode on Windows: connect to {}", socket_path(serial).display());
+        println!(
+            "daemon mode on Windows: connect to {}",
+            socket_path(serial).display()
+        );
         println!("pid: {}", std::process::id());
         Ok(())
     }

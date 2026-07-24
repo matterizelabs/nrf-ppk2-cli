@@ -58,8 +58,7 @@ impl Converter {
         let ug = self.modifiers.ug[range];
 
         let no_gain = (adc_result - o) * (ADC_MULT / r);
-        let adc = ug * (no_gain * (gs * no_gain + gi)
-            + (s * (self.vdd_mv as f64 / 1000.0) + i));
+        let adc = ug * (no_gain * (gs * no_gain + gi) + (s * (self.vdd_mv as f64 / 1000.0) + i));
         let current_ua = adc * 1_000_000.0;
 
         self.apply_spike_filter(current_ua, sample.range)

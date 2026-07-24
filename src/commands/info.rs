@@ -7,8 +7,14 @@ pub fn run(json: bool, file: &str) -> Result<()> {
     let count = frames.len() as u64;
     let sum: f64 = frames.iter().map(|(ua, _)| *ua as f64).sum();
     let avg = if count > 0 { sum / count as f64 } else { 0.0 };
-    let min = frames.iter().map(|(ua, _)| *ua).fold(f32::MAX, |a, b| a.min(b));
-    let max = frames.iter().map(|(ua, _)| *ua).fold(f32::MIN, |a, b| a.max(b));
+    let min = frames
+        .iter()
+        .map(|(ua, _)| *ua)
+        .fold(f32::MAX, |a, b| a.min(b));
+    let max = frames
+        .iter()
+        .map(|(ua, _)| *ua)
+        .fold(f32::MIN, |a, b| a.max(b));
     let duration = count as f64 / 100_000.0;
     let charge = avg * duration / 3600.0;
 

@@ -1,10 +1,10 @@
 use std::io::Read;
 
+use crate::conversion::Converter;
 use crate::error::{Error, Result};
+use crate::metadata;
 use crate::protocol::Command;
 use crate::transport::Ppk2Port;
-use crate::metadata;
-use crate::conversion::Converter;
 use crate::types::{MeasurementMode, Metadata, Sample};
 
 pub struct Ppk2Device {
@@ -46,23 +46,30 @@ impl Ppk2Device {
         }
 
         port.write_command(
-            &Command::RegulatorSet { mv: metadata.vdd_mv }.to_bytes()
+            &Command::RegulatorSet {
+                mv: metadata.vdd_mv,
+            }
+            .to_bytes(),
         )?;
 
         for range in 0..5u8 {
             let ug = metadata.modifiers.ug[range as usize];
             if !(0.9..=1.1).contains(&ug) {
-                eprintln!("warning: user gain for range {} ({:.3}) reset to 1.0", range, ug);
-                port.write_command(
-                    &Command::SetUserGains { range, gain: 1.0 }.to_bytes()
-                )?;
+                eprintln!(
+                    "warning: user gain for range {} ({:.3}) reset to 1.0",
+                    range, ug
+                );
+                port.write_command(&Command::SetUserGains { range, gain: 1.0 }.to_bytes())?;
             }
         }
 
-        let current_mode = MeasurementMode::from_u8(metadata.mode)
-            .unwrap_or(MeasurementMode::Source);
+        let current_mode =
+            MeasurementMode::from_u8(metadata.mode).unwrap_or(MeasurementMode::Source);
         port.write_command(
-            &Command::SetPowerMode { mode: metadata.mode }.to_bytes()
+            &Command::SetPowerMode {
+                mode: metadata.mode,
+            }
+            .to_bytes(),
         )?;
 
         port.write_command(&Command::DeviceRunningSet { on: true }.to_bytes())?;
@@ -83,14 +90,16 @@ impl Ppk2Device {
     }
 
     pub fn set_power(&mut self, on: bool) -> Result<()> {
-        self.port.write_command(&Command::DeviceRunningSet { on }.to_bytes())?;
+        self.port
+            .write_command(&Command::DeviceRunningSet { on }.to_bytes())?;
         self.power_on = on;
         Ok(())
     }
 
     pub fn set_mode(&mut self, mode: MeasurementMode) -> Result<()> {
         let mode_byte = mode as u8;
-        self.port.write_command(&Command::SetPowerMode { mode: mode_byte }.to_bytes())?;
+        self.port
+            .write_command(&Command::SetPowerMode { mode: mode_byte }.to_bytes())?;
 
         self.current_mode = mode;
 
@@ -108,9 +117,8 @@ impl Ppk2Device {
         self.set_voltage(vdd)?;
 
         if self.power_on {
-            self.port.write_command(
-                &Command::DeviceRunningSet { on: true }.to_bytes()
-            )?;
+            self.port
+                .write_command(&Command::DeviceRunningSet { on: true }.to_bytes())?;
         }
 
         Ok(())
@@ -118,7 +126,8 @@ impl Ppk2Device {
 
     pub fn set_voltage(&mut self, mv: u16) -> Result<()> {
         let mv = mv.clamp(800, 5000);
-        self.port.write_command(&Command::RegulatorSet { mv }.to_bytes())?;
+        self.port
+            .write_command(&Command::RegulatorSet { mv }.to_bytes())?;
 
         match self.current_mode {
             MeasurementMode::Source => self.source_vdd_mv = mv,
@@ -137,16 +146,20 @@ impl Ppk2Device {
         self.port.write_command(&Command::AverageStart.to_bytes())?;
 
         let mut buf = [0u8; 4];
-        self.port.set_read_timeout(std::time::Duration::from_secs(1));
+        self.port
+            .set_read_timeout(std::time::Duration::from_secs(1));
         match self.port.inner.read_exact(&mut buf) {
             Ok(()) => {
-                self.port.set_read_timeout(std::time::Duration::from_millis(0));
+                self.port
+                    .set_read_timeout(std::time::Duration::from_millis(0));
                 self.measuring = true;
                 Ok(())
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::TimedOut {
-                    Err(Error::Timeout("no data from device after AVERAGE_START".into()))
+                    Err(Error::Timeout(
+                        "no data from device after AVERAGE_START".into(),
+                    ))
                 } else {
                     Err(Error::Disconnected(0.0))
                 }
@@ -193,47 +206,63 @@ impl Ppk2Device {
     }
 
     pub fn spike_filter_on(&mut self) -> Result<()> {
-        self.port.write_command(&Command::SpikeFilteringOn.to_bytes())
+        self.port
+            .write_command(&Command::SpikeFilteringOn.to_bytes())
     }
 
     pub fn spike_filter_off(&mut self) -> Result<()> {
-        self.port.write_command(&Command::SpikeFilteringOff.to_bytes())
+        self.port
+            .write_command(&Command::SpikeFilteringOff.to_bytes())
     }
 
     pub fn set_range(&mut self, range: u8) -> Result<()> {
-        self.port.write_command(&Command::RangeSet { range }.to_bytes())
+        self.port
+            .write_command(&Command::RangeSet { range }.to_bytes())
     }
 
     pub fn set_avg_num(&mut self, count: u8) -> Result<()> {
-        self.port.write_command(&Command::AvgNumSet { count }.to_bytes())
+        self.port
+            .write_command(&Command::AvgNumSet { count }.to_bytes())
     }
 
     pub fn set_switch_point_down(&mut self, value: u8) -> Result<()> {
-        self.port.write_command(&Command::SwitchPointDown { value }.to_bytes())
+        self.port
+            .write_command(&Command::SwitchPointDown { value }.to_bytes())
     }
 
     pub fn set_switch_point_up(&mut self, value: u8) -> Result<()> {
-        self.port.write_command(&Command::SwitchPointUp { value }.to_bytes())
+        self.port
+            .write_command(&Command::SwitchPointUp { value }.to_bytes())
     }
 
     pub fn set_user_resistor(&mut self, range: u8, ohms: f32) -> Result<()> {
-        self.port.write_command(&Command::ResUserSet { range, resistor: ohms }.to_bytes())
+        self.port.write_command(
+            &Command::ResUserSet {
+                range,
+                resistor: ohms,
+            }
+            .to_bytes(),
+        )
     }
 
     pub fn firmware_trigger_set(&mut self, level_ua: u16) -> Result<()> {
-        self.port.write_command(&Command::TriggerSet { level_ua }.to_bytes())
+        self.port
+            .write_command(&Command::TriggerSet { level_ua }.to_bytes())
     }
 
     pub fn firmware_trigger_window(&mut self, window: u8) -> Result<()> {
-        self.port.write_command(&Command::TriggerWindowSet { window }.to_bytes())
+        self.port
+            .write_command(&Command::TriggerWindowSet { window }.to_bytes())
     }
 
     pub fn firmware_trigger_interval(&mut self, interval: u8) -> Result<()> {
-        self.port.write_command(&Command::TriggerIntervalSet { interval }.to_bytes())
+        self.port
+            .write_command(&Command::TriggerIntervalSet { interval }.to_bytes())
     }
 
     pub fn firmware_trigger_single(&mut self) -> Result<()> {
-        self.port.write_command(&Command::TriggerSingleSet.to_bytes())
+        self.port
+            .write_command(&Command::TriggerSingleSet.to_bytes())
     }
 
     pub fn firmware_trigger_stop(&mut self) -> Result<()> {
@@ -241,7 +270,8 @@ impl Ppk2Device {
     }
 
     pub fn trigger_ext_toggle(&mut self) -> Result<()> {
-        self.port.write_command(&Command::TriggerExtToggle.to_bytes())
+        self.port
+            .write_command(&Command::TriggerExtToggle.to_bytes())
     }
 
     pub fn reset_device(&mut self) -> Result<()> {
@@ -260,6 +290,9 @@ mod tests {
         let dev = Ppk2Device::open(port_path).expect("failed to open PPK2");
         let meta = dev.metadata();
         assert!(!meta.hardware.is_empty());
-        eprintln!("HW: {} mode: {} vdd: {}mV", meta.hardware, meta.mode, meta.vdd_mv);
+        eprintln!(
+            "HW: {} mode: {} vdd: {}mV",
+            meta.hardware, meta.mode, meta.vdd_mv
+        );
     }
 }

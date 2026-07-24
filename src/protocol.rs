@@ -123,18 +123,12 @@ mod tests {
 
     #[test]
     fn set_power_mode_ampere() {
-        assert_eq!(
-            Command::SetPowerMode { mode: 1 }.to_bytes(),
-            vec![0x11, 1]
-        );
+        assert_eq!(Command::SetPowerMode { mode: 1 }.to_bytes(), vec![0x11, 1]);
     }
 
     #[test]
     fn set_power_mode_source() {
-        assert_eq!(
-            Command::SetPowerMode { mode: 2 }.to_bytes(),
-            vec![0x11, 2]
-        );
+        assert_eq!(Command::SetPowerMode { mode: 2 }.to_bytes(), vec![0x11, 2]);
     }
 
     #[test]
@@ -149,7 +143,10 @@ mod tests {
 
     #[test]
     fn set_user_gains() {
-        let cmd = Command::SetUserGains { range: 2, gain: 1.5 };
+        let cmd = Command::SetUserGains {
+            range: 2,
+            gain: 1.5,
+        };
         let bytes = cmd.to_bytes();
         assert_eq!(bytes[0], 0x25);
         assert_eq!(bytes[1], 2);
@@ -190,11 +187,17 @@ mod tests {
         let _ = Command::SwitchPointUp { value: 0 };
         let _ = Command::TriggerExtToggle;
         let _ = Command::SetPowerMode { mode: 0 };
-        let _ = Command::ResUserSet { range: 0, resistor: 0.0 };
+        let _ = Command::ResUserSet {
+            range: 0,
+            resistor: 0.0,
+        };
         let _ = Command::SpikeFilteringOn;
         let _ = Command::SpikeFilteringOff;
         let _ = Command::GetMetadata;
         let _ = Command::Reset;
-        let _ = Command::SetUserGains { range: 0, gain: 0.0 };
+        let _ = Command::SetUserGains {
+            range: 0,
+            gain: 0.0,
+        };
     }
 }

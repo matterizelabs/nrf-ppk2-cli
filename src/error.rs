@@ -9,8 +9,14 @@ pub enum Error {
     Timeout(String),
     InvalidArg(String),
     #[allow(dead_code)]
-    FirmwareMismatch { actual: String, max: String },
-    PartialCapture { samples: u64, duration: f64 },
+    FirmwareMismatch {
+        actual: String,
+        max: String,
+    },
+    PartialCapture {
+        samples: u64,
+        duration: f64,
+    },
     PowerNotOn,
     Io(std::io::Error),
     Serial(serialport::Error),
@@ -26,12 +32,19 @@ impl fmt::Display for Error {
             Self::Timeout(s) => write!(f, "device not responding: {}", s),
             Self::InvalidArg(s) => write!(f, "invalid argument: {}", s),
             Self::FirmwareMismatch { actual, max } => {
-                write!(f, "firmware {} may be incompatible (tested up to {})", actual, max)
+                write!(
+                    f,
+                    "firmware {} may be incompatible (tested up to {})",
+                    actual, max
+                )
             }
             Self::PartialCapture { samples, duration } => {
                 write!(f, "partial capture: {} samples ({:.1}s)", samples, duration)
             }
-            Self::PowerNotOn => write!(f, "power must be on (auto_power=never), run 'ppk2 power on' first"),
+            Self::PowerNotOn => write!(
+                f,
+                "power must be on (auto_power=never), run 'ppk2 power on' first"
+            ),
             Self::Io(e) => write!(f, "{}", e),
             Self::Serial(e) => write!(f, "{}", e),
             Self::Other(s) => write!(f, "{}", s),

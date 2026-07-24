@@ -44,7 +44,9 @@ pub fn run(
     let start = Instant::now();
     let end_time = duration.map(|d| start + std::time::Duration::from_secs_f64(d));
 
-    let serial = serial.map(|s| s.to_string()).unwrap_or_else(|| "unknown".to_string());
+    let serial = serial
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     let mut autosave = if save.is_some() || config.autosave.enabled {
         Some(Autosave::new(&serial, &config.autosave)?)
     } else {
@@ -114,9 +116,7 @@ pub fn run(
     let charge = avg * elapsed / 3600.0;
 
     let power = match device.current_mode() {
-        crate::types::MeasurementMode::Source => {
-            Some(device.vdd_mv() as f64 * avg / 1000.0)
-        }
+        crate::types::MeasurementMode::Source => Some(device.vdd_mv() as f64 * avg / 1000.0),
         _ => None,
     };
 

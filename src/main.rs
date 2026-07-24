@@ -1,19 +1,18 @@
-
+mod autosave;
+mod commands;
+mod config;
+mod conversion;
+mod daemon;
+mod device;
 mod error;
-mod types;
+mod fileio;
+mod firmware;
+mod metadata;
+mod parser;
 mod protocol;
 mod transport;
-mod parser;
-mod conversion;
-mod metadata;
-mod config;
-mod device;
-mod fileio;
-mod autosave;
 mod trigger;
-mod firmware;
-mod daemon;
-mod commands;
+mod types;
 
 use clap::{Parser, Subcommand};
 use error::Result;
@@ -132,27 +131,17 @@ enum DaemonCmd {
 
 #[derive(Subcommand)]
 enum FwTriggerCmd {
-    Set {
-        ua: u16,
-    },
-    Window {
-        val: u8,
-    },
-    Interval {
-        val: u8,
-    },
+    Set { ua: u16 },
+    Window { val: u8 },
+    Interval { val: u8 },
     Single,
     Stop,
 }
 
 #[derive(Subcommand)]
 enum SwitchPointCmd {
-    Down {
-        value: u8,
-    },
-    Up {
-        value: u8,
-    },
+    Down { value: u8 },
+    Up { value: u8 },
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -218,14 +207,24 @@ fn run(cli: Cli) -> Result<()> {
                 PowerState::On => "on",
                 PowerState::Off => "off",
             };
-            commands::power::run(cli.json, state_str, cli.port.as_deref(), cli.serial.as_deref())
+            commands::power::run(
+                cli.json,
+                state_str,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            )
         }
         Commands::Mode { mode } => {
             let mode_str = match mode {
                 DeviceMode::Source => "source",
                 DeviceMode::Ampere => "ampere",
             };
-            commands::mode::run(cli.json, mode_str, cli.port.as_deref(), cli.serial.as_deref())
+            commands::mode::run(
+                cli.json,
+                mode_str,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            )
         }
         Commands::Voltage { mv } => {
             commands::voltage::run(cli.json, mv, cli.port.as_deref(), cli.serial.as_deref())
@@ -256,9 +255,11 @@ fn run(cli: Cli) -> Result<()> {
         ),
         Commands::Report { files } => commands::report::run(cli.json, &files),
         Commands::Firmware(cmd) => match cmd {
-            FirmwareCmd::Info => {
-                commands::firmware_cmd::run_info(cli.json, cli.port.as_deref(), cli.serial.as_deref())
-            }
+            FirmwareCmd::Info => commands::firmware_cmd::run_info(
+                cli.json,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
             FirmwareCmd::Upgrade => commands::firmware_cmd::run_upgrade(
                 cli.json,
                 cli.port.as_deref(),
@@ -266,15 +267,15 @@ fn run(cli: Cli) -> Result<()> {
             ),
         },
         Commands::Daemon(cmd) => match cmd {
-            DaemonCmd::Start => {
-                commands::daemon_cmd::run_start(cli.json, cli.port.as_deref(), cli.serial.as_deref())
-            }
+            DaemonCmd::Start => commands::daemon_cmd::run_start(
+                cli.json,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
             DaemonCmd::Stop { save } => {
                 commands::daemon_cmd::run_stop(cli.json, save.as_deref(), cli.serial.as_deref())
             }
-            DaemonCmd::Status => {
-                commands::daemon_cmd::run_status(cli.json, cli.serial.as_deref())
-            }
+            DaemonCmd::Status => commands::daemon_cmd::run_status(cli.json, cli.serial.as_deref()),
         },
         Commands::Recover { serial } => commands::recover::run(cli.json, serial.as_deref()),
         Commands::Convert { file, output } => {
@@ -302,29 +303,50 @@ fn run(cli: Cli) -> Result<()> {
             commands::avg_num::run(cli.json, count, cli.port.as_deref(), cli.serial.as_deref())
         }
         Commands::SwitchPoint(cmd) => match cmd {
-            SwitchPointCmd::Down { value } => {
-                commands::switch_point::run_down(cli.json, value, cli.port.as_deref(), cli.serial.as_deref())
-            }
-            SwitchPointCmd::Up { value } => {
-                commands::switch_point::run_up(cli.json, value, cli.port.as_deref(), cli.serial.as_deref())
-            }
+            SwitchPointCmd::Down { value } => commands::switch_point::run_down(
+                cli.json,
+                value,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
+            SwitchPointCmd::Up { value } => commands::switch_point::run_up(
+                cli.json,
+                value,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
         },
-        Commands::CalSet { range, ohms } => {
-            commands::cal_set::run(cli.json, range, ohms, cli.port.as_deref(), cli.serial.as_deref())
-        }
+        Commands::CalSet { range, ohms } => commands::cal_set::run(
+            cli.json,
+            range,
+            ohms,
+            cli.port.as_deref(),
+            cli.serial.as_deref(),
+        ),
         Commands::FwTrigger(cmd) => match cmd {
-            FwTriggerCmd::Set { ua } => {
-                commands::fw_trigger::run_set(cli.json, ua, cli.port.as_deref(), cli.serial.as_deref())
-            }
-            FwTriggerCmd::Window { val } => {
-                commands::fw_trigger::run_window(cli.json, val, cli.port.as_deref(), cli.serial.as_deref())
-            }
-            FwTriggerCmd::Interval { val } => {
-                commands::fw_trigger::run_interval(cli.json, val, cli.port.as_deref(), cli.serial.as_deref())
-            }
-            FwTriggerCmd::Single => {
-                commands::fw_trigger::run_single(cli.json, cli.port.as_deref(), cli.serial.as_deref())
-            }
+            FwTriggerCmd::Set { ua } => commands::fw_trigger::run_set(
+                cli.json,
+                ua,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
+            FwTriggerCmd::Window { val } => commands::fw_trigger::run_window(
+                cli.json,
+                val,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
+            FwTriggerCmd::Interval { val } => commands::fw_trigger::run_interval(
+                cli.json,
+                val,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
+            FwTriggerCmd::Single => commands::fw_trigger::run_single(
+                cli.json,
+                cli.port.as_deref(),
+                cli.serial.as_deref(),
+            ),
             FwTriggerCmd::Stop => {
                 commands::fw_trigger::run_stop(cli.json, cli.port.as_deref(), cli.serial.as_deref())
             }

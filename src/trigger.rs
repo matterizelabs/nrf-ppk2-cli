@@ -39,7 +39,8 @@ pub struct TriggerEngine {
 
 impl TriggerEngine {
     pub fn new(config: TriggerConfig) -> Self {
-        let pre_samples = (config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
+        let pre_samples =
+            (config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
         Self {
             config,
             state: TriggerState::Armed,
@@ -59,7 +60,8 @@ impl TriggerEngine {
 
         self.sample_count += 1;
 
-        let pre_cap = (self.config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
+        let pre_cap =
+            (self.config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
         let pre_cap = pre_cap.max(1);
 
         match self.state {
@@ -75,8 +77,9 @@ impl TriggerEngine {
                     if edge_triggered {
                         self.fired_at = Some(self.sample_count);
                         self.captured = self.pre_trigger.iter().copied().collect();
-                        self.post_samples_remaining =
-                            (self.config.post_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as u64;
+                        self.post_samples_remaining = (self.config.post_trigger_ms as f64 / 1000.0
+                            * SAMPLES_PER_SECOND as f64)
+                            as u64;
                         self.captured.push((ua, logic));
                         self.pre_trigger.clear();
                         self.prev_above = Some(above);

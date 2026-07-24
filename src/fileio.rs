@@ -2,11 +2,7 @@ use crate::conversion::convert_bits16;
 use crate::error::Result;
 use std::io::Write;
 
-pub fn write_ppk2(
-    path: &str,
-    frames: &[(f32, u8)],
-    start_time_ms: u64,
-) -> Result<()> {
+pub fn write_ppk2(path: &str, frames: &[(f32, u8)], start_time_ms: u64) -> Result<()> {
     let file = std::fs::File::create(path)?;
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
@@ -31,9 +27,21 @@ pub fn write_ppk2(
     let mut minimap_data = String::from("[");
     let mut first = true;
     for chunk in frames.chunks(step) {
-        let min_na = chunk.iter().map(|(ua, _)| (ua * 1000.0) as i64).min().unwrap_or(0).max(200);
-        let max_na = chunk.iter().map(|(ua, _)| (ua * 1000.0) as i64).max().unwrap_or(0).max(200);
-        if !first { minimap_data.push(','); }
+        let min_na = chunk
+            .iter()
+            .map(|(ua, _)| (ua * 1000.0) as i64)
+            .min()
+            .unwrap_or(0)
+            .max(200);
+        let max_na = chunk
+            .iter()
+            .map(|(ua, _)| (ua * 1000.0) as i64)
+            .max()
+            .unwrap_or(0)
+            .max(200);
+        if !first {
+            minimap_data.push(',');
+        }
         first = false;
         minimap_data.push_str(&format!(r#"{{"min":{},"max":{}}}"#, min_na, max_na));
     }
@@ -103,11 +111,7 @@ mod tests {
 
     #[test]
     fn roundtrip_ppk2() {
-        let frames = vec![
-            (42.0f32, 0x03u8),
-            (100.0f32, 0xFFu8),
-            (0.0f32, 0x00u8),
-        ];
+        let frames = vec![(42.0f32, 0x03u8), (100.0f32, 0xFFu8), (0.0f32, 0x00u8)];
         let path = "/tmp/test_roundtrip.ppk2";
         write_ppk2(path, &frames, 1720000000000).unwrap();
         let read = read_ppk2(path).unwrap();

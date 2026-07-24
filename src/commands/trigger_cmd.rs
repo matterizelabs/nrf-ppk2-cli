@@ -137,7 +137,10 @@ pub fn run(
 
     let elapsed = start.elapsed().as_secs_f64();
     if !triggered && !running.load(Ordering::SeqCst) {
-        eprintln!("trigger: interrupted before trigger fired ({} samples)", count);
+        eprintln!(
+            "trigger: interrupted before trigger fired ({} samples)",
+            count
+        );
         return Ok(());
     }
 
@@ -151,9 +154,7 @@ pub fn run(
     let charge = avg * elapsed / 3600.0;
 
     let power = match device.current_mode() {
-        crate::types::MeasurementMode::Source => {
-            Some(device.vdd_mv() as f64 * avg / 1000.0)
-        }
+        crate::types::MeasurementMode::Source => Some(device.vdd_mv() as f64 * avg / 1000.0),
         _ => None,
     };
 

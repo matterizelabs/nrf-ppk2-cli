@@ -29,9 +29,18 @@ pub struct AutosaveConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            defaults: DefaultsConfig { mode: "source".into(), voltage_mv: 3300 },
-            behavior: BehaviorConfig { auto_power: "session".into() },
-            autosave: AutosaveConfig { enabled: true, interval_s: 30, dir: None },
+            defaults: DefaultsConfig {
+                mode: "source".into(),
+                voltage_mv: 3300,
+            },
+            behavior: BehaviorConfig {
+                auto_power: "session".into(),
+            },
+            autosave: AutosaveConfig {
+                enabled: true,
+                interval_s: 30,
+                dir: None,
+            },
         }
     }
 }
@@ -75,7 +84,10 @@ impl Config {
     pub fn state_dir() -> PathBuf {
         #[cfg(target_os = "macos")]
         {
-            home_dir().join("Library").join("Application Support").join("ppk2")
+            home_dir()
+                .join("Library")
+                .join("Application Support")
+                .join("ppk2")
         }
         #[cfg(target_os = "linux")]
         {
@@ -102,7 +114,13 @@ impl Config {
 
 fn config_path() -> PathBuf {
     #[cfg(target_os = "macos")]
-    { home_dir().join("Library").join("Application Support").join("ppk2").join("config.toml") }
+    {
+        home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("ppk2")
+            .join("config.toml")
+    }
     #[cfg(target_os = "linux")]
     {
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
@@ -116,16 +134,27 @@ fn config_path() -> PathBuf {
         if let Ok(appdata) = std::env::var("APPDATA") {
             PathBuf::from(appdata).join("ppk2").join("config.toml")
         } else {
-            home_dir().join("AppData").join("Roaming").join("ppk2").join("config.toml")
+            home_dir()
+                .join("AppData")
+                .join("Roaming")
+                .join("ppk2")
+                .join("config.toml")
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { home_dir().join(".config").join("ppk2").join("config.toml") }
+    {
+        home_dir().join(".config").join("ppk2").join("config.toml")
+    }
 }
 
 fn data_dir() -> PathBuf {
     #[cfg(target_os = "macos")]
-    { home_dir().join("Library").join("Application Support").join("ppk2") }
+    {
+        home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("ppk2")
+    }
     #[cfg(target_os = "linux")]
     {
         if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
@@ -143,7 +172,9 @@ fn data_dir() -> PathBuf {
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { home_dir().join(".local").join("share").join("ppk2") }
+    {
+        home_dir().join(".local").join("share").join("ppk2")
+    }
 }
 
 fn home_dir() -> PathBuf {
@@ -167,7 +198,7 @@ fn parse_config(content: &str) -> Config {
             continue;
         }
         if line.starts_with('[') && line.ends_with(']') {
-            section = &line[1..line.len()-1];
+            section = &line[1..line.len() - 1];
             continue;
         }
         if let Some((key, value)) = line.split_once('=') {
