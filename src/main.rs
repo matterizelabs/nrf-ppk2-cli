@@ -108,9 +108,23 @@ fn main() {
 fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::List => commands::list::run(cli.json),
-        Commands::Power { .. } => Ok(()),
-        Commands::Mode { .. } => Ok(()),
-        Commands::Voltage { .. } => Ok(()),
+        Commands::Power { state } => {
+            let state_str = match state {
+                PowerState::On => "on",
+                PowerState::Off => "off",
+            };
+            commands::power::run(cli.json, state_str, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::Mode { mode } => {
+            let mode_str = match mode {
+                DeviceMode::Source => "source",
+                DeviceMode::Ampere => "ampere",
+            };
+            commands::mode::run(cli.json, mode_str, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::Voltage { mv } => {
+            commands::voltage::run(cli.json, mv, cli.port.as_deref(), cli.serial.as_deref())
+        }
         Commands::Measure { .. } => Ok(()),
         Commands::Info { .. } => Ok(()),
     }
