@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod error;
 mod types;
 mod protocol;
