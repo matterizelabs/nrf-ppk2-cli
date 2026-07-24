@@ -105,14 +105,7 @@ impl Ppk2Device {
 
         let vdd = match mode {
             MeasurementMode::Source => self.source_vdd_mv,
-            MeasurementMode::Ampere => {
-                if let Some(av) = self.ampere_vdd_mv {
-                    av
-                } else {
-                    eprintln!("warning: ampere VDD not set, use 'ppk2 voltage <mv>' for accurate calibration");
-                    self.source_vdd_mv
-                }
-            }
+            MeasurementMode::Ampere => self.ampere_vdd_mv.unwrap_or(self.source_vdd_mv),
         };
         self.set_voltage(vdd)?;
 

@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(c.defaults.mode, "source");
         assert_eq!(c.defaults.voltage_mv, 3300);
         assert_eq!(c.behavior.auto_power, "session");
-        assert_eq!(c.autosave.enabled, true);
+        assert!(c.autosave.enabled);
         assert_eq!(c.autosave.interval_s, 30);
     }
 
