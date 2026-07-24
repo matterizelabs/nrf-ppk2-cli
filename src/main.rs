@@ -116,7 +116,6 @@ enum Commands {
 #[derive(Subcommand)]
 enum FirmwareCmd {
     Info,
-    Upgrade,
 }
 
 #[derive(Subcommand)]
@@ -256,11 +255,6 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Report { files } => commands::report::run(cli.json, &files),
         Commands::Firmware(cmd) => match cmd {
             FirmwareCmd::Info => commands::firmware_cmd::run_info(
-                cli.json,
-                cli.port.as_deref(),
-                cli.serial.as_deref(),
-            ),
-            FirmwareCmd::Upgrade => commands::firmware_cmd::run_upgrade(
                 cli.json,
                 cli.port.as_deref(),
                 cli.serial.as_deref(),
