@@ -3,6 +3,7 @@ mod types;
 mod protocol;
 mod transport;
 mod parser;
+mod conversion;
 mod metadata;
 
 use clap::{Parser, Subcommand};
