@@ -57,4 +57,10 @@ impl From<zip::result::ZipError> for Error {
     }
 }
 
+impl From<ctrlc::Error> for Error {
+    fn from(e: ctrlc::Error) -> Self {
+        Self::Other(e.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;

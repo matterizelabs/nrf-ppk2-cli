@@ -125,7 +125,13 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Voltage { mv } => {
             commands::voltage::run(cli.json, mv, cli.port.as_deref(), cli.serial.as_deref())
         }
-        Commands::Measure { .. } => Ok(()),
+        Commands::Measure { duration, save } => commands::measure::run(
+            cli.json,
+            duration,
+            save.as_deref(),
+            cli.port.as_deref(),
+            cli.serial.as_deref(),
+        ),
         Commands::Info { .. } => Ok(()),
     }
 }
