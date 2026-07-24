@@ -7,6 +7,7 @@ mod conversion;
 mod metadata;
 mod config;
 mod device;
+mod fileio;
 
 use clap::{Parser, Subcommand};
 use error::Result;

@@ -51,4 +51,10 @@ impl From<serialport::Error> for Error {
     }
 }
 
+impl From<zip::result::ZipError> for Error {
+    fn from(e: zip::result::ZipError) -> Self {
+        Self::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
