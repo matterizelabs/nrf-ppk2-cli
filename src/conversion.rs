@@ -10,7 +10,6 @@ pub struct Converter {
 
 struct SpikeFilterState {
     ema_fast: [f64; 5],
-    ema_slow: [f64; 5],
     prev_range: Option<u8>,
     range_transition_count: u8,
     filter_phase: FilterPhase,
@@ -26,7 +25,6 @@ impl SpikeFilterState {
     fn new() -> Self {
         Self {
             ema_fast: [0.0; 5],
-            ema_slow: [0.0; 5],
             prev_range: None,
             range_transition_count: 0,
             filter_phase: FilterPhase::Idle,
@@ -107,7 +105,6 @@ mod tests {
 
     fn make_sample(adc: u16, range: u8) -> Sample {
         Sample {
-            raw: (adc as u32) | ((range as u32) << 14),
             adc,
             range,
             counter: 0,

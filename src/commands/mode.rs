@@ -21,7 +21,7 @@ pub fn run(
     device.set_mode(mode)?;
 
     if json {
-        println!("{}", format!(r#"{{"mode":"{}"}}"#, mode_str));
+        println!(r#"{{"mode":"{}"}}"#, mode_str);
     } else {
         println!("mode:{}", mode_str);
     }

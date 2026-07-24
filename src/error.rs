@@ -3,10 +3,12 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     DeviceNotFound,
+    #[allow(dead_code)]
     DeviceBusy(String),
     Disconnected(f64),
     Timeout(String),
     InvalidArg(String),
+    #[allow(dead_code)]
     FirmwareMismatch { actual: String, max: String },
     PartialCapture { samples: u64, duration: f64 },
     PowerNotOn,
@@ -53,7 +55,7 @@ impl From<serialport::Error> for Error {
 
 impl From<zip::result::ZipError> for Error {
     fn from(e: zip::result::ZipError) -> Self {
-        Self::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+        Self::Io(std::io::Error::other(e))
     }
 }
 

@@ -7,7 +7,6 @@ pub enum Command {
     AverageStart,
     AverageStop,
     RangeSet { range: u8 },
-    LcdSet { value: u8 },
     TriggerStop,
     DeviceRunningSet { on: bool },
     RegulatorSet { mv: u16 },
@@ -31,20 +30,13 @@ impl Command {
                 let c = (level_ua & 0xFF) as u8;
                 vec![0x01, b, c]
             }
-            Self::AvgNumSet { count } => {
-                vec![0x02, *count]
-            }
-            Self::TriggerWindowSet { window } => {
-                vec![0x03, *window]
-            }
-            Self::TriggerIntervalSet { interval } => {
-                vec![0x04, *interval]
-            }
+            Self::AvgNumSet { count } => vec![0x02, *count],
+            Self::TriggerWindowSet { window } => vec![0x03, *window],
+            Self::TriggerIntervalSet { interval } => vec![0x04, *interval],
             Self::TriggerSingleSet => vec![0x05],
             Self::AverageStart => vec![0x06],
             Self::AverageStop => vec![0x07],
             Self::RangeSet { range } => vec![0x08, *range],
-            Self::LcdSet { value } => vec![0x09, *value],
             Self::TriggerStop => vec![0x0A],
             Self::DeviceRunningSet { on } => vec![0x0C, if *on { 1 } else { 0 }],
             Self::RegulatorSet { mv } => {
@@ -75,7 +67,7 @@ impl Command {
 
 pub fn encode_regulator_voltage(mv: u16) -> (u8, u8) {
     let mv = mv.clamp(800, 5000);
-    let diff = (mv - 800 + 32) as u16;
+    let diff = mv - 800 + 32;
     let b1 = 3u8 + (diff / 256) as u8;
     let b2 = (diff % 256) as u8;
     (b1, b2)
@@ -191,7 +183,6 @@ mod tests {
         let _ = Command::AverageStart;
         let _ = Command::AverageStop;
         let _ = Command::RangeSet { range: 0 };
-        let _ = Command::LcdSet { value: 0 };
         let _ = Command::TriggerStop;
         let _ = Command::DeviceRunningSet { on: false };
         let _ = Command::RegulatorSet { mv: 800 };

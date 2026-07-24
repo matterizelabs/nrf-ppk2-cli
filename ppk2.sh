@@ -13,9 +13,9 @@ if [ "$CMD" = "remove" ]; then
 fi
 
 case "$(uname -s)" in
-    Linux)  OS="linux" ;;
-    Darwin) OS="darwin" ;;
-    MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
+    Linux)  OS="linux"; EXT="tar.gz" ;;
+    Darwin) OS="darwin"; EXT="tar.gz" ;;
+    MINGW*|MSYS*|CYGWIN*) OS="windows"; EXT="zip" ;;
     *)      echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 
@@ -25,15 +25,19 @@ case "$(uname -m)" in
     *)            echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
 esac
 
-TAR="${BIN}-${OS}-${ARCH}.tar.gz"
-URL="https://github.com/${REPO}/releases/latest/download/${TAR}"
+PKG="${BIN}-${OS}-${ARCH}.${EXT}"
+URL="https://github.com/${REPO}/releases/latest/download/${PKG}"
 
 echo "fetch: ${URL}"
 TMPDIR="$(mktemp -d)"
 trap "rm -rf ${TMPDIR}" EXIT
 
-curl -fsSL "${URL}" -o "${TMPDIR}/${TAR}"
-tar -xzf "${TMPDIR}/${TAR}" -C "${TMPDIR}"
+curl -fsSL "${URL}" -o "${TMPDIR}/${PKG}"
+if [ "${EXT}" = "zip" ]; then
+    unzip -q "${TMPDIR}/${PKG}" -d "${TMPDIR}"
+else
+    tar -xzf "${TMPDIR}/${PKG}" -C "${TMPDIR}"
+fi
 
 sudo install -m 755 "${TMPDIR}/${BIN}" "${INSTALL_DIR}/${BIN}"
 echo "installed: ${INSTALL_DIR}/${BIN}"

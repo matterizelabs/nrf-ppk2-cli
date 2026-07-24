@@ -87,6 +87,31 @@ enum Commands {
         #[arg(short = 'o', long)]
         output: Option<String>,
     },
+    #[command(name = "spike-filter")]
+    SpikeFilter {
+        #[arg(value_enum)]
+        state: SpikeFilterState,
+    },
+    #[command(name = "range")]
+    Range {
+        value: u8,
+    },
+    #[command(name = "avg-num")]
+    AvgNum {
+        count: u8,
+    },
+    #[command(subcommand)]
+    SwitchPoint(SwitchPointCmd),
+    #[command(name = "cal-set")]
+    CalSet {
+        range: u8,
+        ohms: f32,
+    },
+    #[command(subcommand)]
+    FwTrigger(FwTriggerCmd),
+    #[command(name = "trigger-ext")]
+    TriggerExt,
+    Reset,
 }
 
 #[derive(Subcommand)]
@@ -103,6 +128,37 @@ enum DaemonCmd {
         save: Option<String>,
     },
     Status,
+}
+
+#[derive(Subcommand)]
+enum FwTriggerCmd {
+    Set {
+        ua: u16,
+    },
+    Window {
+        val: u8,
+    },
+    Interval {
+        val: u8,
+    },
+    Single,
+    Stop,
+}
+
+#[derive(Subcommand)]
+enum SwitchPointCmd {
+    Down {
+        value: u8,
+    },
+    Up {
+        value: u8,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone)]
+enum SpikeFilterState {
+    On,
+    Off,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -231,6 +287,53 @@ fn run(cli: Cli) -> Result<()> {
                 }
             });
             crate::fileio::export_csv(&file, &out)
+        }
+        Commands::SpikeFilter { state } => {
+            let on = match state {
+                SpikeFilterState::On => true,
+                SpikeFilterState::Off => false,
+            };
+            commands::spike_filter::run(cli.json, on, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::Range { value } => {
+            commands::range::run(cli.json, value, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::AvgNum { count } => {
+            commands::avg_num::run(cli.json, count, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::SwitchPoint(cmd) => match cmd {
+            SwitchPointCmd::Down { value } => {
+                commands::switch_point::run_down(cli.json, value, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            SwitchPointCmd::Up { value } => {
+                commands::switch_point::run_up(cli.json, value, cli.port.as_deref(), cli.serial.as_deref())
+            }
+        },
+        Commands::CalSet { range, ohms } => {
+            commands::cal_set::run(cli.json, range, ohms, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::FwTrigger(cmd) => match cmd {
+            FwTriggerCmd::Set { ua } => {
+                commands::fw_trigger::run_set(cli.json, ua, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            FwTriggerCmd::Window { val } => {
+                commands::fw_trigger::run_window(cli.json, val, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            FwTriggerCmd::Interval { val } => {
+                commands::fw_trigger::run_interval(cli.json, val, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            FwTriggerCmd::Single => {
+                commands::fw_trigger::run_single(cli.json, cli.port.as_deref(), cli.serial.as_deref())
+            }
+            FwTriggerCmd::Stop => {
+                commands::fw_trigger::run_stop(cli.json, cli.port.as_deref(), cli.serial.as_deref())
+            }
+        },
+        Commands::TriggerExt => {
+            commands::trigger_ext::run(cli.json, cli.port.as_deref(), cli.serial.as_deref())
+        }
+        Commands::Reset => {
+            commands::reset::run(cli.json, cli.port.as_deref(), cli.serial.as_deref())
         }
     }
 }

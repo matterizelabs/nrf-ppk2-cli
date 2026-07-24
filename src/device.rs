@@ -34,7 +34,7 @@ impl Ppk2Device {
                 let ver: Vec<&str> = ver_str.split(&[' ', '-']).collect();
                 if let Some(v) = ver.first() {
                     if let Ok(version) = v.parse::<f64>() {
-                        if version < 1.1 || version > 1.3 {
+                        if !(1.1..=1.3).contains(&version) {
                             eprintln!(
                                 "warning: firmware {} may be incompatible (tested 1.1.0–1.2.4)",
                                 hw
@@ -190,6 +190,62 @@ impl Ppk2Device {
             MeasurementMode::Source => self.source_vdd_mv,
             MeasurementMode::Ampere => self.ampere_vdd_mv.unwrap_or(0),
         }
+    }
+
+    pub fn spike_filter_on(&mut self) -> Result<()> {
+        self.port.write_command(&Command::SpikeFilteringOn.to_bytes())
+    }
+
+    pub fn spike_filter_off(&mut self) -> Result<()> {
+        self.port.write_command(&Command::SpikeFilteringOff.to_bytes())
+    }
+
+    pub fn set_range(&mut self, range: u8) -> Result<()> {
+        self.port.write_command(&Command::RangeSet { range }.to_bytes())
+    }
+
+    pub fn set_avg_num(&mut self, count: u8) -> Result<()> {
+        self.port.write_command(&Command::AvgNumSet { count }.to_bytes())
+    }
+
+    pub fn set_switch_point_down(&mut self, value: u8) -> Result<()> {
+        self.port.write_command(&Command::SwitchPointDown { value }.to_bytes())
+    }
+
+    pub fn set_switch_point_up(&mut self, value: u8) -> Result<()> {
+        self.port.write_command(&Command::SwitchPointUp { value }.to_bytes())
+    }
+
+    pub fn set_user_resistor(&mut self, range: u8, ohms: f32) -> Result<()> {
+        self.port.write_command(&Command::ResUserSet { range, resistor: ohms }.to_bytes())
+    }
+
+    pub fn firmware_trigger_set(&mut self, level_ua: u16) -> Result<()> {
+        self.port.write_command(&Command::TriggerSet { level_ua }.to_bytes())
+    }
+
+    pub fn firmware_trigger_window(&mut self, window: u8) -> Result<()> {
+        self.port.write_command(&Command::TriggerWindowSet { window }.to_bytes())
+    }
+
+    pub fn firmware_trigger_interval(&mut self, interval: u8) -> Result<()> {
+        self.port.write_command(&Command::TriggerIntervalSet { interval }.to_bytes())
+    }
+
+    pub fn firmware_trigger_single(&mut self) -> Result<()> {
+        self.port.write_command(&Command::TriggerSingleSet.to_bytes())
+    }
+
+    pub fn firmware_trigger_stop(&mut self) -> Result<()> {
+        self.port.write_command(&Command::TriggerStop.to_bytes())
+    }
+
+    pub fn trigger_ext_toggle(&mut self) -> Result<()> {
+        self.port.write_command(&Command::TriggerExtToggle.to_bytes())
+    }
+
+    pub fn reset_device(&mut self) -> Result<()> {
+        self.port.write_command(&Command::Reset.to_bytes())
     }
 }
 

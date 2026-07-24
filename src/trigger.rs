@@ -20,6 +20,7 @@ pub struct TriggerConfig {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TriggerState {
     Armed,
+    #[allow(dead_code)]
     Fired,
     Collecting,
     Done,

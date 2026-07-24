@@ -8,7 +8,7 @@ pub fn run(
     port: Option<&str>,
     serial: Option<&str>,
 ) -> Result<()> {
-    if mv < 800 || mv > 5000 {
+    if !(800..=5000).contains(&mv) {
         return Err(crate::error::Error::InvalidArg(
             format!("{}mV out of range (800-5000mV)", mv)
         ));
@@ -18,7 +18,7 @@ pub fn run(
     device.set_voltage(mv)?;
 
     if json {
-        println!("{}", format!(r#"{{"vdd_mv":{}}}"#, mv));
+        println!(r#"{{"vdd_mv":{}}}"#, mv);
     } else {
         println!("VDD:{}mV", mv);
     }

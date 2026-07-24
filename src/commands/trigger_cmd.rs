@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     json: bool,
     threshold_ua: f64,

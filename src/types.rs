@@ -16,15 +16,8 @@ impl MeasurementMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PowerState {
-    Off = 0,
-    On = 1,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Sample {
-    pub raw: u32,
     pub adc: u16,
     pub range: u8,
     pub counter: u8,
@@ -34,7 +27,6 @@ pub struct Sample {
 impl Sample {
     pub fn from_raw(raw: u32) -> Self {
         Self {
-            raw,
             adc: (raw & 0x3FFF) as u16,
             range: ((raw >> 14) & 0x7) as u8,
             counter: ((raw >> 18) & 0x3F) as u8,
@@ -74,9 +66,18 @@ pub struct Metadata {
     pub hardware: String,
     pub mode: u8,
     pub vdd_mv: u16,
+    #[allow(dead_code)]
     pub calibrated: bool,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PowerState {
+    Off = 0,
+    On = 1,
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DeviceState {
     pub mode: MeasurementMode,

@@ -16,7 +16,7 @@ pub fn run(
 
     let status = if on { "on" } else { "off" };
     if json {
-        println!("{}", format!(r#"{{"dut":"{}"}}"#, status));
+        println!(r#"{{"dut":"{}"}}"#, status);
     } else {
         println!("DUT:{}", status);
     }

@@ -36,10 +36,6 @@ impl Ppk2Port {
         Ok(())
     }
 
-    pub fn read_bytes(&mut self, buf: &mut [u8]) -> Result<usize> {
-        Ok(self.inner.read(buf)?)
-    }
-
     pub fn read_until_end(&mut self) -> Result<String> {
         let mut buf = Vec::new();
         let mut chunk = [0u8; 128];
