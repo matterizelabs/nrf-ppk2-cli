@@ -8,6 +8,7 @@ mod metadata;
 mod config;
 mod device;
 mod fileio;
+mod autosave;
 
 use clap::{Parser, Subcommand};
 use error::Result;
