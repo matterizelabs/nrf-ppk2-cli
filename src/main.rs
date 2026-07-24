@@ -9,6 +9,7 @@ mod config;
 mod device;
 mod fileio;
 mod autosave;
+mod trigger;
 mod commands;
 
 use clap::{Parser, Subcommand};
@@ -53,6 +54,18 @@ enum Commands {
     },
     Info {
         file: String,
+    },
+    Trigger {
+        #[arg(short = 't', long)]
+        threshold: f64,
+        #[arg(short = 'e', long, default_value = "rising")]
+        edge: String,
+        #[arg(long, default_value = "100")]
+        pre_trigger: u64,
+        #[arg(long, default_value = "1000")]
+        post_trigger: u64,
+        #[arg(long)]
+        save: Option<String>,
     },
 }
 
@@ -133,5 +146,21 @@ fn run(cli: Cli) -> Result<()> {
             cli.serial.as_deref(),
         ),
         Commands::Info { file } => commands::info::run(cli.json, &file),
+        Commands::Trigger {
+            threshold,
+            edge,
+            pre_trigger,
+            post_trigger,
+            save,
+        } => commands::trigger_cmd::run(
+            cli.json,
+            threshold,
+            &edge,
+            pre_trigger,
+            post_trigger,
+            save.as_deref(),
+            cli.port.as_deref(),
+            cli.serial.as_deref(),
+        ),
     }
 }
