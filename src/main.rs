@@ -69,7 +69,8 @@ fn main() {
                     error::Error::DeviceNotFound
                     | error::Error::InvalidArg(_)
                     | error::Error::PowerNotOn => "USER_ERROR",
-                    error::Error::Disconnected(_)
+                    error::Error::DeviceBusy(_)
+                    | error::Error::Disconnected(_)
                     | error::Error::Timeout(_)
                     | error::Error::FirmwareMismatch { .. } => "DEVICE_ERROR",
                     _ => "INTERNAL_ERROR",
@@ -82,7 +83,8 @@ fn main() {
                 error::Error::DeviceNotFound
                 | error::Error::InvalidArg(_)
                 | error::Error::PowerNotOn => 1,
-                error::Error::Disconnected(_)
+                error::Error::DeviceBusy(_)
+                | error::Error::Disconnected(_)
                 | error::Error::Timeout(_)
                 | error::Error::FirmwareMismatch { .. } => 2,
                 _ => 3,
