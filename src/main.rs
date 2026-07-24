@@ -132,6 +132,6 @@ fn run(cli: Cli) -> Result<()> {
             cli.port.as_deref(),
             cli.serial.as_deref(),
         ),
-        Commands::Info { .. } => Ok(()),
+        Commands::Info { file } => commands::info::run(cli.json, &file),
     }
 }
