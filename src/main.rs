@@ -6,6 +6,7 @@ mod parser;
 mod conversion;
 mod metadata;
 mod config;
+mod device;
 
 use clap::{Parser, Subcommand};
 use error::Result;

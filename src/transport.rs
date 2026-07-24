@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use serialport::{available_ports, SerialPort, SerialPortInfo, SerialPortType};
 
 pub struct Ppk2Port {
-    inner: Box<dyn SerialPort>,
+    pub(crate) inner: Box<dyn SerialPort>,
 }
 
 impl Ppk2Port {
@@ -55,6 +55,10 @@ impl Ppk2Port {
             }
         }
         Ok(String::from_utf8_lossy(&buf).to_string())
+    }
+
+    pub fn set_read_timeout(&mut self, dur: std::time::Duration) {
+        self.inner.set_timeout(dur).ok();
     }
 
     pub fn drain_input(&mut self) {
