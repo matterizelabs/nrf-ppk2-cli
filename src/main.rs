@@ -1,5 +1,6 @@
 mod error;
 mod types;
+mod protocol;
 
 use clap::{Parser, Subcommand};
 use error::Result;
