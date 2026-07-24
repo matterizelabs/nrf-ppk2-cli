@@ -1,12 +1,14 @@
+use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
 use crate::autosave::Autosave;
 use crate::config::Config;
 use crate::device::Ppk2Device;
 use crate::error::{Error, Result};
 use crate::transport::resolve_port;
 use crate::types::MeasurementStats;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
 
 pub fn run(
     json: bool,
@@ -59,6 +61,8 @@ pub fn run(
     let mut max: f64 = f64::MIN;
 
     let mut parser = crate::parser::SampleParser::new();
+    let mut last_report = Instant::now();
+    let report_interval = std::time::Duration::from_millis(500);
 
     loop {
         if !running.load(Ordering::SeqCst) {
@@ -103,6 +107,21 @@ pub fn run(
             }
             Err(e) => return Err(e),
         }
+
+        if !json && last_report.elapsed() >= report_interval {
+            let elapsed = start.elapsed().as_secs_f64();
+            let avg = if count > 0 { sum / count as f64 } else { 0.0 };
+            let (v, unit) = format_current(avg);
+            let mut line = format!("{:.1}s  avg {:.1}{}  #{}", elapsed, v, unit, count);
+            if let crate::types::MeasurementMode::Source = device.current_mode() {
+                let pw = device.vdd_mv() as f64 * avg / 1000.0;
+                let (pv, punit) = format_power(pw);
+                line.push_str(&format!("  {:.1}{}", pv, punit));
+            }
+            eprint!("\x1b[2K\r{}", line);
+            let _ = std::io::stderr().flush();
+            last_report = Instant::now();
+        }
     }
 
     device.stop_measurement()?;
@@ -136,6 +155,10 @@ pub fn run(
         asv.finalize(save)?;
     }
 
+    if !json {
+        eprint!("\x1b[2K\r");
+    }
+
     if json {
         let stats = MeasurementStats {
             duration_s: elapsed,
@@ -165,4 +188,24 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn format_current(ua: f64) -> (f64, &'static str) {
+    if ua >= 1_000_000.0 {
+        (ua / 1_000_000.0, "A")
+    } else if ua >= 1000.0 {
+        (ua / 1000.0, "mA")
+    } else {
+        (ua, "uA")
+    }
+}
+
+fn format_power(uw: f64) -> (f64, &'static str) {
+    if uw >= 1_000_000.0 {
+        (uw / 1_000_000.0, "W")
+    } else if uw >= 1000.0 {
+        (uw / 1000.0, "mW")
+    } else {
+        (uw, "uW")
+    }
 }
