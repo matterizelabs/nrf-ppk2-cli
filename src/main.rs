@@ -21,10 +21,10 @@ use error::Result;
 #[derive(Parser)]
 #[command(name = "ppk2", about = "Power Profiler Kit II CLI", version = env!("GIT_VERSION"))]
 struct Cli {
-    #[arg(short = 'p', long, help = "Serial port path")]
+    #[arg(short = 'p', long, global = true, help = "Serial port path")]
     port: Option<String>,
 
-    #[arg(short = 's', long, help = "Device serial number")]
+    #[arg(short = 's', long, global = true, help = "Device serial number")]
     serial: Option<String>,
 
     #[arg(long, global = true, help = "Output as JSON")]
