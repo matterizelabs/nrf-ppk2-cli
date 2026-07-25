@@ -7,7 +7,7 @@ use crate::autosave::Autosave;
 use crate::config::Config;
 use crate::device::Ppk2Device;
 use crate::error::{Error, Result};
-use crate::transport::{find_ppk2_ports, resolve_port};
+use crate::transport::resolve_port;
 use crate::types::MeasurementStats;
 
 pub fn run(
@@ -25,18 +25,8 @@ pub fn run(
         }
     }
 
-    let port_path = resolve_port(port, serial)?;
+    let (port_path, serial_str) = resolve_port(port, serial)?;
     let mut device = Ppk2Device::open(&port_path)?;
-
-    let serial_str = serial
-        .map(|s| s.to_string())
-        .or_else(|| {
-            find_ppk2_ports()
-                .into_iter()
-                .find(|d| d.control_port == port_path)
-                .map(|d| d.serial)
-        })
-        .unwrap_or_else(|| "unknown".to_string());
 
     let auto_power = config.behavior.auto_power.as_str();
     match auto_power {

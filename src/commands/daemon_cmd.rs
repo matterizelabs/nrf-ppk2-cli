@@ -17,7 +17,7 @@ fn escape_json(s: &str) -> String {
 }
 
 pub fn run_start(json: bool, port: Option<&str>, serial: Option<&str>) -> Result<()> {
-    let port_path = resolve_port(port, serial)?;
+    let (port_path, _) = resolve_port(port, serial)?;
     let sn = resolve_daemon_serial(serial);
     if json {
         let sock_path = daemon::socket_path(&sn);

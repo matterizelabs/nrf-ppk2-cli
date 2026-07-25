@@ -6,7 +6,7 @@ pub fn run(json: bool, value: u8, port: Option<&str>, serial: Option<&str>) -> R
     if value > 4 {
         return Err(Error::InvalidArg("range must be 0-4".into()));
     }
-    let port_path = resolve_port(port, serial)?;
+    let (port_path, _) = resolve_port(port, serial)?;
     let mut device = Ppk2Device::open(&port_path)?;
     device.set_range(value)?;
     if json {

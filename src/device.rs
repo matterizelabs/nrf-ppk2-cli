@@ -148,34 +148,20 @@ impl Ppk2Device {
         self.port.drain_input();
         self.port.write_command(&Command::AverageStart.to_bytes())?;
 
-        let mut buf = [0u8; 4];
-        self.port.set_timeout(std::time::Duration::from_secs(1));
-        match self.port.read_exact(&mut buf) {
-            Ok(()) => {
-                self.port.set_timeout(std::time::Duration::from_millis(0));
-                self.measuring = true;
-                self.start_time = Some(Instant::now());
-                Ok(())
-            }
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::TimedOut {
-                    Err(Error::Timeout(
-                        "no data from device after AVERAGE_START".into(),
-                    ))
-                } else {
-                    Err(Error::Disconnected(0.0))
-                }
-            }
-        }
+        self.port.set_timeout(std::time::Duration::from_millis(0));
+        self.measuring = true;
+        self.start_time = Some(Instant::now());
+        Ok(())
     }
 
     pub fn stop_measurement(&mut self) -> Result<()> {
         self.measuring = false;
         self.port.write_command(&Command::AverageStop.to_bytes())?;
         let mut buf = [0u8; 4];
-        self.port.set_timeout(std::time::Duration::from_millis(50));
-        while self.port.read_exact(&mut buf).is_ok() {}
-        self.port.set_timeout(std::time::Duration::from_secs(2));
+        self.port
+            .with_timeout(std::time::Duration::from_millis(50), |port| {
+                while port.read_exact(&mut buf).is_ok() {}
+            });
         Ok(())
     }
 

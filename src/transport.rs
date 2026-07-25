@@ -14,10 +14,12 @@ pub struct Ppk2Port {
     inner: Box<dyn SerialPort>,
 }
 
+const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 impl Ppk2Port {
     pub fn open(path: &str) -> Result<Self> {
         let mut inner = serialport::new(path, 115200)
-            .timeout(std::time::Duration::from_secs(2))
+            .timeout(DEFAULT_TIMEOUT)
             .open()
             .map_err(|e| {
                 let is_perm =
@@ -36,6 +38,18 @@ impl Ppk2Port {
         inner.write_request_to_send(false).ok();
 
         Ok(Self { inner })
+    }
+
+    pub fn with_timeout<T>(
+        &mut self,
+        dur: std::time::Duration,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let original = self.inner.timeout();
+        self.inner.set_timeout(dur).ok();
+        let result = f(self);
+        self.inner.set_timeout(original).ok();
+        result
     }
 
     pub fn write_command(&mut self, cmd: &[u8]) -> Result<()> {
@@ -66,7 +80,7 @@ impl Ppk2Port {
                 .unwrap_or("")
                 .to_string()
         } else {
-            String::from_utf8_lossy(&buf).to_string()
+            return Err(Error::Other("non-UTF-8 metadata response".into()));
         };
         Ok(text)
     }
@@ -77,13 +91,9 @@ impl Ppk2Port {
 
     pub fn drain_input(&mut self) {
         let mut buf = [0u8; 256];
-        self.inner
-            .set_timeout(std::time::Duration::from_millis(10))
-            .ok();
-        while self.inner.read(&mut buf).is_ok_and(|n| n > 0) {}
-        self.inner
-            .set_timeout(std::time::Duration::from_secs(2))
-            .ok();
+        self.with_timeout(std::time::Duration::from_millis(10), |s| {
+            while s.inner.read(&mut buf).is_ok_and(|n| n > 0) {}
+        });
     }
 
     pub fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
@@ -216,22 +226,29 @@ pub fn find_ppk2_ports() -> Vec<Ppk2DeviceInfo> {
     result
 }
 
-pub fn resolve_port(port: Option<&str>, serial: Option<&str>) -> Result<String> {
+pub fn resolve_port(port: Option<&str>, serial: Option<&str>) -> Result<(String, String)> {
     if let Some(p) = port {
-        return Ok(p.to_string());
+        let sn = serial.map(|s| s.to_string()).unwrap_or_else(|| {
+            find_ppk2_ports()
+                .into_iter()
+                .find(|d| d.control_port == p)
+                .map(|d| d.serial)
+                .unwrap_or_else(|| "unknown".to_string())
+        });
+        return Ok((p.to_string(), sn));
     }
     let devices = find_ppk2_ports();
     if let Some(sn) = serial {
         for dev in &devices {
             if dev.serial == sn {
-                return Ok(dev.control_port.clone());
+                return Ok((dev.control_port.clone(), sn.to_string()));
             }
         }
         return Err(Error::DeviceNotFound);
     }
     devices
         .first()
-        .map(|d| d.control_port.clone())
+        .map(|d| (d.control_port.clone(), d.serial.clone()))
         .ok_or(Error::DeviceNotFound)
 }
 

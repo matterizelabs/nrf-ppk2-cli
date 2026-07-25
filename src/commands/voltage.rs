@@ -9,7 +9,7 @@ pub fn run(json: bool, mv: u16, port: Option<&str>, serial: Option<&str>) -> Res
             mv
         )));
     }
-    let port_path = resolve_port(port, serial)?;
+    let (port_path, _) = resolve_port(port, serial)?;
     let mut device = Ppk2Device::open(&port_path)?;
     device.set_voltage(mv)?;
 

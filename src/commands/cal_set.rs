@@ -15,7 +15,7 @@ pub fn run(
     if ohms <= 0.0 {
         return Err(Error::InvalidArg("ohms must be positive".into()));
     }
-    let port_path = resolve_port(port, serial)?;
+    let (port_path, _) = resolve_port(port, serial)?;
     let mut device = Ppk2Device::open(&port_path)?;
     device.set_user_resistor(range, ohms)?;
     if json {

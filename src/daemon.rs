@@ -203,27 +203,31 @@ mod unix {
             match device.read_sample_raw() {
                 Ok(Some(raw)) => {
                     let samples = parser.feed(&[raw]);
-                    let mut stats = state.stats.lock().unwrap();
+                    let mut converted: Vec<(f64, u8)> = Vec::new();
                     for sample in samples {
-                        let ua = match device.convert_sample(&sample) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                eprintln!("conversion error: {}", e);
-                                continue;
+                        match device.convert_sample(&sample) {
+                            Ok(ua) => converted.push((ua, sample.logic)),
+                            Err(e) => eprintln!("conversion error: {}", e),
+                        }
+                    }
+                    {
+                        let mut stats = state.stats.lock().unwrap();
+                        for &(ua, _) in &converted {
+                            stats.count += 1;
+                            stats.sum += ua;
+                            if ua < stats.min {
+                                stats.min = ua;
                             }
-                        };
-                        stats.count += 1;
-                        stats.sum += ua;
-                        if ua < stats.min {
-                            stats.min = ua;
+                            if ua > stats.max {
+                                stats.max = ua;
+                            }
                         }
-                        if ua > stats.max {
-                            stats.max = ua;
+                    }
+                    if let Some(ref mut asv) = autosave {
+                        for (ua, logic) in converted {
+                            asv.push((ua as f32, logic));
                         }
-                        if let Some(ref mut asv) = autosave {
-                            asv.push((ua as f32, sample.logic));
-                            asv.maybe_flush();
-                        }
+                        asv.maybe_flush();
                     }
                 }
                 Ok(None) => continue,
