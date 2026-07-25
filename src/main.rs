@@ -36,19 +36,26 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// List connected PPK2 devices
     List,
+    /// Enable or disable DUT power output
     #[command(name = "power")]
     Power {
         #[arg(value_enum)]
         state: PowerState,
     },
+    /// Set measurement mode (source or ampere)
     Mode {
         #[arg(value_enum)]
         mode: DeviceMode,
     },
+    /// Set output voltage in mV (800–5000, source mode only)
     Voltage {
+        #[arg(help = "Voltage in mV")]
         mv: u16,
     },
+    /// Measure current
+    #[command(about = "Measure current at 100ksps. Use --rate to downsample.")]
     Measure {
         #[arg(short = 'd', long, help = "Seconds to measure (omitted = run until Ctrl+C)")]
         duration: Option<f64>,
@@ -57,9 +64,13 @@ enum Commands {
         #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
         rate: Option<u32>,
     },
+    /// Show summary of a .ppk2 file
     Info {
+        #[arg(help = "Path to .ppk2 file")]
         file: String,
     },
+    /// Capture a spike with pre/post-trigger buffering
+    #[command(about = "Capture a current spike. Set --threshold above baseline to trigger on peaks.")]
     Trigger {
         #[arg(short = 't', long, help = "Current threshold in uA")]
         threshold: f64,
@@ -72,48 +83,63 @@ enum Commands {
         #[arg(long, help = "Save captured window to .ppk2 file")]
         save: Option<String>,
     },
+    /// Show summary for one or more .ppk2 files
     Report {
-        #[arg(required = true)]
+        #[arg(required = true, help = "Paths to .ppk2 files")]
         files: Vec<String>,
     },
+    /// Show firmware version and calibration status
     #[command(subcommand)]
     Firmware(FirmwareCmd),
+    /// Run background measurement daemon
     #[command(subcommand)]
     Daemon(DaemonCmd),
+    /// List orphaned autosave files
     Recover {
         serial: Option<String>,
     },
+    /// Export .ppk2 file to CSV
     Convert {
-        #[arg(required = true)]
+        #[arg(required = true, help = "Path to .ppk2 file")]
         file: String,
-        #[arg(short = 'o', long)]
+        #[arg(short = 'o', long, help = "Output CSV path (default: <file>.csv)")]
         output: Option<String>,
     },
+    /// Enable/disable spike filter (EMA smoothing)
     #[command(name = "spike-filter")]
     SpikeFilter {
         #[arg(value_enum)]
         state: SpikeFilterState,
     },
+    /// Force measurement range (0-4, auto-switching if unset)
     #[command(name = "range")]
     Range {
+        #[arg(help = "Range index (0-4)")]
         value: u8,
     },
+    /// Set firmware averaging count
     #[command(name = "avg-num")]
     AvgNum {
         count: u8,
     },
+    /// Set auto-range switch points
     #[command(subcommand)]
     SwitchPoint(SwitchPointCmd),
+    /// Set custom calibration resistor
     #[command(name = "cal-set")]
     CalSet {
         range: u8,
         ohms: f32,
     },
+    /// Firmware-level trigger controls
     #[command(subcommand)]
     FwTrigger(FwTriggerCmd),
+    /// Toggle external trigger output
     #[command(name = "trigger-ext")]
     TriggerExt,
+    /// Reset device
     Reset,
+    /// Manage configuration
     #[command(subcommand)]
     Config(ConfigCmd),
 }
@@ -131,14 +157,17 @@ enum FirmwareCmd {
 
 #[derive(Subcommand)]
 enum DaemonCmd {
+    /// Start daemon in background
     Start {
         #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
         rate: Option<u32>,
     },
+    /// Stop daemon and finalize autosave
     Stop {
         #[arg(long, help = "Save daemon session to .ppk2 file")]
         save: Option<String>,
     },
+    /// Query daemon status
     Status,
 }
 
