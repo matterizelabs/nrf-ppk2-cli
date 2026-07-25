@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::time::Instant;
 
 use crate::conversion::Converter;
 use crate::error::{Error, Result};
@@ -6,6 +6,8 @@ use crate::metadata;
 use crate::protocol::Command;
 use crate::transport::Ppk2Port;
 use crate::types::{MeasurementMode, Metadata, Sample};
+
+const MAX_READ_RETRIES: u8 = 3;
 
 pub struct Ppk2Device {
     port: Ppk2Port,
@@ -16,6 +18,7 @@ pub struct Ppk2Device {
     ampere_vdd_mv: Option<u16>,
     power_on: bool,
     measuring: bool,
+    start_time: Option<Instant>,
 }
 
 impl Ppk2Device {
@@ -33,8 +36,14 @@ impl Ppk2Device {
             if let Some(ver_str) = hw.split('v').nth(1) {
                 let ver: Vec<&str> = ver_str.split(&[' ', '-']).collect();
                 if let Some(v) = ver.first() {
-                    if let Ok(version) = v.parse::<f64>() {
-                        if !(1.1..=1.3).contains(&version) {
+                    let parts: Vec<u32> = v.split('.').filter_map(|p| p.parse().ok()).collect();
+                    if parts.len() >= 2 {
+                        let major = parts[0];
+                        let minor = parts[1];
+                        let patch = parts.get(2).copied().unwrap_or(0);
+                        let ver_num =
+                            (major as f64) + (minor as f64) / 10.0 + (patch as f64) / 100.0;
+                        if !(1.1..=1.4).contains(&ver_num) {
                             eprintln!(
                                 "warning: firmware {} may be incompatible (tested 1.1.0–1.2.4)",
                                 hw
@@ -86,6 +95,7 @@ impl Ppk2Device {
             ampere_vdd_mv: None,
             power_on: true,
             measuring: false,
+            start_time: None,
         })
     }
 
@@ -139,13 +149,12 @@ impl Ppk2Device {
         self.port.write_command(&Command::AverageStart.to_bytes())?;
 
         let mut buf = [0u8; 4];
-        self.port
-            .set_read_timeout(std::time::Duration::from_secs(1));
-        match self.port.inner.read_exact(&mut buf) {
+        self.port.set_timeout(std::time::Duration::from_secs(1));
+        match self.port.read_exact(&mut buf) {
             Ok(()) => {
-                self.port
-                    .set_read_timeout(std::time::Duration::from_millis(0));
+                self.port.set_timeout(std::time::Duration::from_millis(0));
                 self.measuring = true;
+                self.start_time = Some(Instant::now());
                 Ok(())
             }
             Err(e) => {
@@ -163,19 +172,37 @@ impl Ppk2Device {
     pub fn stop_measurement(&mut self) -> Result<()> {
         self.measuring = false;
         self.port.write_command(&Command::AverageStop.to_bytes())?;
+        let mut buf = [0u8; 4];
+        self.port.set_timeout(std::time::Duration::from_millis(50));
+        while self.port.read_exact(&mut buf).is_ok() {}
+        self.port.set_timeout(std::time::Duration::from_secs(2));
         Ok(())
     }
 
     pub fn read_sample_raw(&mut self) -> Result<Option<u32>> {
         let mut buf = [0u8; 4];
-        match self.port.inner.read_exact(&mut buf) {
-            Ok(()) => Ok(Some(u32::from_le_bytes(buf))),
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(None),
-            Err(_) => Err(Error::Disconnected(0.0)),
+        let mut retries = MAX_READ_RETRIES;
+        loop {
+            match self.port.read_exact(&mut buf) {
+                Ok(()) => return Ok(Some(u32::from_le_bytes(buf))),
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
+                Err(_) if retries > 0 => {
+                    retries -= 1;
+                    continue;
+                }
+                Err(_) => {
+                    let elapsed = self
+                        .start_time
+                        .as_ref()
+                        .map(|t| t.elapsed().as_secs_f64())
+                        .unwrap_or(0.0);
+                    return Err(Error::Disconnected(elapsed));
+                }
+            }
         }
     }
 
-    pub fn convert_sample(&mut self, sample: &Sample) -> f64 {
+    pub fn convert_sample(&mut self, sample: &Sample) -> Result<f64> {
         self.converter.adc_to_ua(sample)
     }
 
@@ -200,12 +227,16 @@ impl Ppk2Device {
 
     pub fn spike_filter_on(&mut self) -> Result<()> {
         self.port
-            .write_command(&Command::SpikeFilteringOn.to_bytes())
+            .write_command(&Command::SpikeFilteringOn.to_bytes())?;
+        self.converter.set_ema_enabled(true);
+        Ok(())
     }
 
     pub fn spike_filter_off(&mut self) -> Result<()> {
         self.port
-            .write_command(&Command::SpikeFilteringOff.to_bytes())
+            .write_command(&Command::SpikeFilteringOff.to_bytes())?;
+        self.converter.set_ema_enabled(false);
+        Ok(())
     }
 
     pub fn set_range(&mut self, range: u8) -> Result<()> {
@@ -238,7 +269,7 @@ impl Ppk2Device {
         )
     }
 
-    pub fn firmware_trigger_set(&mut self, level_ua: u16) -> Result<()> {
+    pub fn firmware_trigger_set(&mut self, level_ua: u32) -> Result<()> {
         self.port
             .write_command(&Command::TriggerSet { level_ua }.to_bytes())
     }

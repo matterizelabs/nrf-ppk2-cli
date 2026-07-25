@@ -138,7 +138,7 @@ enum DaemonCmd {
 
 #[derive(Subcommand)]
 enum FwTriggerCmd {
-    Set { ua: u16 },
+    Set { ua: u32 },
     Window { val: u8 },
     Interval { val: u8 },
     Single,
@@ -177,31 +177,11 @@ fn main() {
         Ok(()) => std::process::exit(0),
         Err(e) => {
             if json {
-                let code = match &e {
-                    error::Error::DeviceNotFound
-                    | error::Error::InvalidArg(_)
-                    | error::Error::PowerNotOn => "USER_ERROR",
-                    error::Error::DeviceBusy(_)
-                    | error::Error::Disconnected(_)
-                    | error::Error::Timeout(_)
-                    | error::Error::FirmwareMismatch { .. } => "DEVICE_ERROR",
-                    _ => "INTERNAL_ERROR",
-                };
-                eprintln!(r#"{{"error":"{}","code":"{}"}}"#, e, code);
+                eprintln!(r#"{{"error":"{}","code":"{}"}}"#, e, e.error_code());
             } else {
                 eprintln!("error: {}", e);
             }
-            let code = match &e {
-                error::Error::DeviceNotFound
-                | error::Error::InvalidArg(_)
-                | error::Error::PowerNotOn => 1,
-                error::Error::DeviceBusy(_)
-                | error::Error::Disconnected(_)
-                | error::Error::Timeout(_)
-                | error::Error::FirmwareMismatch { .. } => 2,
-                _ => 3,
-            };
-            std::process::exit(code);
+            std::process::exit(e.exit_code());
         }
     }
 }

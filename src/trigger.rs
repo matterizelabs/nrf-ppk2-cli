@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 const SAMPLES_PER_SECOND: u64 = 100_000;
+const HYSTERESIS_UA: f64 = 1.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TriggerEdge {
@@ -20,8 +21,6 @@ pub struct TriggerConfig {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TriggerState {
     Armed,
-    #[allow(dead_code)]
-    Fired,
     Collecting,
     Done,
 }
@@ -35,21 +34,22 @@ pub struct TriggerEngine {
     post_samples_remaining: u64,
     sample_count: u64,
     fired_at: Option<u64>,
+    pre_cap: usize,
 }
 
 impl TriggerEngine {
     pub fn new(config: TriggerConfig) -> Self {
-        let pre_samples =
-            (config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
+        let pre_cap = (config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
         Self {
             config,
             state: TriggerState::Armed,
-            pre_trigger: VecDeque::with_capacity(pre_samples.max(1)),
+            pre_trigger: VecDeque::with_capacity(pre_cap.max(1)),
             captured: Vec::new(),
             prev_above: None,
             post_samples_remaining: 0,
             sample_count: 0,
             fired_at: None,
+            pre_cap: pre_cap.max(1),
         }
     }
 
@@ -60,10 +60,6 @@ impl TriggerEngine {
 
         self.sample_count += 1;
 
-        let pre_cap =
-            (self.config.pre_trigger_ms as f64 / 1000.0 * SAMPLES_PER_SECOND as f64) as usize;
-        let pre_cap = pre_cap.max(1);
-
         match self.state {
             TriggerState::Armed => {
                 let above = ua >= self.config.threshold_ua;
@@ -72,7 +68,14 @@ impl TriggerEngine {
                     let edge_triggered = match self.config.edge {
                         TriggerEdge::Rising => !prev && above,
                         TriggerEdge::Falling => prev && !above,
-                        TriggerEdge::Both => prev != above,
+                        TriggerEdge::Both => {
+                            if prev == above {
+                                false
+                            } else {
+                                let diff = (ua - self.config.threshold_ua).abs();
+                                diff > HYSTERESIS_UA
+                            }
+                        }
                     };
                     if edge_triggered {
                         self.fired_at = Some(self.sample_count);
@@ -94,13 +97,10 @@ impl TriggerEngine {
                 }
 
                 self.prev_above = Some(above);
-                while self.pre_trigger.len() >= pre_cap {
+                while self.pre_trigger.len() >= self.pre_cap {
                     self.pre_trigger.pop_front();
                 }
                 self.pre_trigger.push_back((ua, logic));
-            }
-            TriggerState::Fired => {
-                self.state = TriggerState::Done;
             }
             TriggerState::Collecting => {
                 self.captured.push((ua, logic));
@@ -179,6 +179,23 @@ mod tests {
 
         engine.feed(1200.0, 0);
         assert_eq!(engine.state(), TriggerState::Done);
+    }
+
+    #[test]
+    fn both_edge_hysteresis() {
+        let config = TriggerConfig {
+            threshold_ua: 1000.0,
+            edge: TriggerEdge::Both,
+            pre_trigger_ms: 10,
+            post_trigger_ms: 0,
+        };
+        let mut engine = TriggerEngine::new(config);
+
+        engine.feed(1000.0, 0);
+        assert_eq!(engine.state(), TriggerState::Armed);
+
+        engine.feed(1000.5, 0);
+        assert_eq!(engine.state(), TriggerState::Armed);
     }
 
     #[test]

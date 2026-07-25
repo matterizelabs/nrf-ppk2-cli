@@ -70,23 +70,6 @@ pub struct Metadata {
     pub calibrated: bool,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PowerState {
-    Off = 0,
-    On = 1,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct DeviceState {
-    pub mode: MeasurementMode,
-    pub vdd_mv: u16,
-    pub power: PowerState,
-    pub source_vdd_mv: u16,
-    pub ampere_vdd_mv: Option<u16>,
-}
-
 #[derive(Debug, Clone)]
 pub struct MeasurementStats {
     pub duration_s: f64,

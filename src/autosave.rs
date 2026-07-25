@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::AutosaveConfig;
@@ -15,7 +14,7 @@ pub struct Autosave {
     total_frames: usize,
     frames: Vec<(f32, u8)>,
     chunks: Vec<Arc<Vec<(f32, u8)>>>,
-    writer: Option<JoinHandle<()>>,
+    start_time_ms: u64,
 }
 
 impl Autosave {
@@ -32,6 +31,7 @@ impl Autosave {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        let start_time_ms = secs * 1000;
         let path = dir.join(format!("ppk2-{}.ppk2", secs));
 
         Ok(Self {
@@ -42,7 +42,7 @@ impl Autosave {
             total_frames: 0,
             frames: Vec::new(),
             chunks: Vec::new(),
-            writer: None,
+            start_time_ms,
         })
     }
 
@@ -59,31 +59,12 @@ impl Autosave {
         if since < (100_000 * self.interval_s as usize) {
             return;
         }
-        if let Some(ref h) = self.writer {
-            if !h.is_finished() {
-                return;
-            }
-            self.writer = None;
-        }
         let chunk = Arc::new(std::mem::take(&mut self.frames));
-        self.chunks.push(Arc::clone(&chunk));
+        self.chunks.push(chunk);
         self.last_flush_count = self.total_frames;
-        let path = self.path.clone();
-        let handle = std::thread::spawn(move || {
-            let _ = fileio::write_ppk2(path.to_str().unwrap_or("autosave.ppk2"), &chunk, 0);
-        });
-        self.writer = Some(handle);
     }
 
-    fn join_writer(&mut self) {
-        if let Some(h) = self.writer.take() {
-            let _ = h.join();
-        }
-    }
-
-    pub fn finalize(mut self, save_path: Option<&str>) -> Result<String> {
-        self.join_writer();
-
+    pub fn finalize(self, save_path: Option<&str>) -> Result<String> {
         let total: usize = self.chunks.iter().map(|c| c.len()).sum::<usize>() + self.frames.len();
         let mut all = Vec::with_capacity(total);
         for chunk in &self.chunks {
@@ -91,12 +72,22 @@ impl Autosave {
         }
         all.extend_from_slice(&self.frames);
 
-        fileio::write_ppk2(self.path.to_str().unwrap_or("autosave.ppk2"), &all, 0)?;
         if let Some(sp) = save_path {
-            std::fs::copy(&self.path, sp)?;
+            let dest = std::path::Path::new(sp);
+            let tmp = dest.with_extension("ppk2.tmp");
+            let tmp_str = tmp.to_str().unwrap_or("autosave.tmp.ppk2");
+            fileio::write_ppk2(tmp_str, &all, self.start_time_ms)?;
+            if std::fs::rename(tmp_str, sp).is_err() {
+                std::fs::copy(tmp_str, sp)?;
+                let _ = std::fs::remove_file(tmp_str);
+            }
             let _ = std::fs::remove_file(&self.path);
             Ok(sp.to_string())
         } else {
+            let tmp_path = self.path.with_extension("ppk2.tmp");
+            let tmp_str = tmp_path.to_str().unwrap_or("autosave.tmp.ppk2");
+            fileio::write_ppk2(tmp_str, &all, self.start_time_ms)?;
+            std::fs::rename(tmp_str, &self.path)?;
             Ok(self.path.to_string_lossy().to_string())
         }
     }

@@ -6,6 +6,7 @@ pub struct Config {
     pub defaults: DefaultsConfig,
     pub behavior: BehaviorConfig,
     pub autosave: AutosaveConfig,
+    pub port: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ impl Default for Config {
                 interval_s: 30,
                 dir: None,
             },
+            port: None,
         }
     }
 }
@@ -60,7 +62,6 @@ impl Config {
             }
         }
 
-        // Env var overrides
         if let Ok(v) = std::env::var("PPK2_VOLTAGE") {
             config.defaults.voltage_mv = v.parse().unwrap_or(config.defaults.voltage_mv);
         }
@@ -71,8 +72,7 @@ impl Config {
             config.autosave.dir = Some(v);
         }
         if let Ok(v) = std::env::var("PPK2_PORT") {
-            // handled by CLI args, just note it exists
-            let _ = v;
+            config.port = Some(v);
         }
 
         Ok(config)
@@ -191,7 +191,30 @@ fn home_dir() -> PathBuf {
     }
 }
 
-/// Minimal TOML-like parser for our simple config
+fn toml_value(value: &str) -> String {
+    let v = value.trim();
+    if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
+        v[1..v.len() - 1].to_string()
+    } else {
+        v.to_string()
+    }
+}
+
+fn toml_bool(value: &str) -> bool {
+    let v = value.trim();
+    v == "true" || v == "\"true\""
+}
+
+fn toml_u64(value: &str) -> u64 {
+    let v = value.trim().trim_matches('"');
+    v.parse().unwrap_or(0)
+}
+
+fn toml_u16(value: &str) -> u16 {
+    let v = value.trim().trim_matches('"');
+    v.parse().unwrap_or(0)
+}
+
 fn parse_config(content: &str) -> Config {
     let mut config = Config::default();
     let mut section = "";
@@ -206,20 +229,36 @@ fn parse_config(content: &str) -> Config {
             continue;
         }
         if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim().trim_matches('"');
-            let value = value.trim().trim_matches('"');
+            let key = key.trim();
 
             match (section, key) {
-                ("defaults", "mode") => config.defaults.mode = value.to_string(),
+                ("defaults", "mode") => {
+                    let v = toml_value(value);
+                    if v == "source" || v == "ampere" {
+                        config.defaults.mode = v;
+                    } else {
+                        eprintln!("warning: invalid mode '{}', using default 'source'", v);
+                    }
+                }
                 ("defaults", "voltage_mv") => {
-                    config.defaults.voltage_mv = value.parse().unwrap_or(3300)
+                    config.defaults.voltage_mv = toml_u16(value);
                 }
-                ("behavior", "auto_power") => config.behavior.auto_power = value.to_string(),
-                ("autosave", "enabled") => config.autosave.enabled = value == "true",
+                ("behavior", "auto_power") => {
+                    let v = toml_value(value);
+                    if v == "never" || v == "session" || v == "always" {
+                        config.behavior.auto_power = v;
+                    } else {
+                        eprintln!(
+                            "warning: invalid auto_power '{}', using default 'session'",
+                            v
+                        );
+                    }
+                }
+                ("autosave", "enabled") => config.autosave.enabled = toml_bool(value),
                 ("autosave", "interval_s") => {
-                    config.autosave.interval_s = value.parse().unwrap_or(30)
+                    config.autosave.interval_s = toml_u64(value);
                 }
-                ("autosave", "dir") => config.autosave.dir = Some(value.to_string()),
+                ("autosave", "dir") => config.autosave.dir = Some(toml_value(value)),
                 _ => {}
             }
         }
@@ -256,5 +295,37 @@ auto_power = "never"
         assert_eq!(c.defaults.mode, "ampere");
         assert_eq!(c.defaults.voltage_mv, 5000);
         assert_eq!(c.behavior.auto_power, "never");
+    }
+
+    #[test]
+    fn parse_toml_bare_boolean() {
+        let toml_str = r#"
+[autosave]
+enabled = true
+interval_s = 60
+"#;
+        let c = parse_config(toml_str);
+        assert!(c.autosave.enabled);
+        assert_eq!(c.autosave.interval_s, 60);
+    }
+
+    #[test]
+    fn parse_toml_quoted_boolean() {
+        let toml_str = r#"
+[autosave]
+enabled = "true"
+"#;
+        let c = parse_config(toml_str);
+        assert!(c.autosave.enabled);
+    }
+
+    #[test]
+    fn parse_toml_bare_integer() {
+        let toml_str = r#"
+[defaults]
+voltage_mv = 1800
+"#;
+        let c = parse_config(toml_str);
+        assert_eq!(c.defaults.voltage_mv, 1800);
     }
 }

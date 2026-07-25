@@ -11,7 +11,7 @@ pub struct Ppk2DeviceInfo {
 }
 
 pub struct Ppk2Port {
-    pub(crate) inner: Box<dyn SerialPort>,
+    inner: Box<dyn SerialPort>,
 }
 
 impl Ppk2Port {
@@ -32,7 +32,6 @@ impl Ppk2Port {
                 }
             })?;
 
-        // Force DTR high to prevent PPK2 reset on macOS
         inner.write_data_terminal_ready(true).ok();
         inner.write_request_to_send(false).ok();
 
@@ -46,23 +45,33 @@ impl Ppk2Port {
     }
 
     pub fn read_until_end(&mut self) -> Result<String> {
-        let mut buf = Vec::new();
-        let mut chunk = [0u8; 128];
+        let mut buf: Vec<u8> = Vec::new();
+        let mut chunk = [0u8; 512];
+        let mut last_valid: usize = 0;
         loop {
             let n = self.inner.read(&mut chunk)?;
             if n == 0 {
                 break;
             }
             buf.extend_from_slice(&chunk[..n]);
-            let text = String::from_utf8_lossy(&buf);
-            if text.contains("END") {
-                break;
+            if let Ok(text) = std::str::from_utf8(&buf) {
+                last_valid = buf.len();
+                if text.contains("END") {
+                    break;
+                }
             }
         }
-        Ok(String::from_utf8_lossy(&buf).to_string())
+        let text = if last_valid > 0 {
+            std::str::from_utf8(&buf[..last_valid])
+                .unwrap_or("")
+                .to_string()
+        } else {
+            String::from_utf8_lossy(&buf).to_string()
+        };
+        Ok(text)
     }
 
-    pub fn set_read_timeout(&mut self, dur: std::time::Duration) {
+    pub fn set_timeout(&mut self, dur: std::time::Duration) {
         self.inner.set_timeout(dur).ok();
     }
 
@@ -75,6 +84,10 @@ impl Ppk2Port {
         self.inner
             .set_timeout(std::time::Duration::from_secs(2))
             .ok();
+    }
+
+    pub fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        self.inner.read_exact(buf)
     }
 }
 
@@ -116,7 +129,6 @@ fn resolve_iface(path: &str) -> u32 {
     if let Some(iface) = extract_iface_from_path(path) {
         return iface;
     }
-    // Fallback: use ACM number as heuristic
     if let Some(name) = Path::new(path).file_name().and_then(|n| n.to_str()) {
         if let Some(rest) = name.strip_prefix("ttyACM") {
             if let Ok(n) = rest.parse::<u32>() {

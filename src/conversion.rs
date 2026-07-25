@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::types::{Modifiers, Sample};
 
 const ADC_MULT: f64 = 1.8 / 163840.0;
@@ -6,6 +7,7 @@ pub struct Converter {
     modifiers: Modifiers,
     vdd_mv: u16,
     spike_state: SpikeFilterState,
+    ema_enabled: bool,
 }
 
 struct SpikeFilterState {
@@ -38,6 +40,7 @@ impl Converter {
             modifiers,
             vdd_mv,
             spike_state: SpikeFilterState::new(),
+            ema_enabled: true,
         }
     }
 
@@ -45,8 +48,18 @@ impl Converter {
         self.vdd_mv = vdd_mv;
     }
 
-    pub fn adc_to_ua(&mut self, sample: &Sample) -> f64 {
-        let range = sample.range.min(4) as usize;
+    pub fn set_ema_enabled(&mut self, enabled: bool) {
+        self.ema_enabled = enabled;
+    }
+
+    pub fn adc_to_ua(&mut self, sample: &Sample) -> Result<f64> {
+        if sample.range > 4 {
+            return Err(crate::error::Error::Other(format!(
+                "invalid range value from firmware: {} (valid: 0-4)",
+                sample.range
+            )));
+        }
+        let range = sample.range as usize;
         let adc_result = (sample.adc as f64) * 4.0;
 
         let o = self.modifiers.o[range];
@@ -61,11 +74,15 @@ impl Converter {
         let adc = ug * (no_gain * (gs * no_gain + gi) + (s * (self.vdd_mv as f64 / 1000.0) + i));
         let current_ua = adc * 1_000_000.0;
 
-        self.apply_spike_filter(current_ua, sample.range)
+        if self.ema_enabled {
+            Ok(self.apply_spike_filter(current_ua, sample.range))
+        } else {
+            Ok(current_ua)
+        }
     }
 
     fn apply_spike_filter(&mut self, raw_ua: f64, range: u8) -> f64 {
-        let range_idx = range.min(4) as usize;
+        let range_idx = range as usize;
 
         if Some(range) != self.spike_state.prev_range {
             self.spike_state.range_transition_count = 0;
@@ -116,7 +133,7 @@ mod tests {
         let modifiers = Modifiers::default();
         let mut converter = Converter::new(modifiers, 3300);
         let sample = make_sample(0, 2);
-        let ua = converter.adc_to_ua(&sample);
+        let ua = converter.adc_to_ua(&sample).unwrap();
         assert!((ua).abs() < 100.0);
     }
 
@@ -125,9 +142,32 @@ mod tests {
         let modifiers = Modifiers::default();
         let mut converter = Converter::new(modifiers, 3300);
         let sample = make_sample(1000, 2);
-        let ua = converter.adc_to_ua(&sample);
+        let ua = converter.adc_to_ua(&sample).unwrap();
         assert!(ua > 0.0);
         assert!(ua < 1_000_000.0);
+    }
+
+    #[test]
+    fn corrupted_range_flagged() {
+        let modifiers = Modifiers::default();
+        let mut converter = Converter::new(modifiers, 3300);
+        let sample = Sample {
+            adc: 100,
+            range: 7,
+            counter: 0,
+            logic: 0,
+        };
+        assert!(converter.adc_to_ua(&sample).is_err());
+    }
+
+    #[test]
+    fn ema_can_be_disabled() {
+        let modifiers = Modifiers::default();
+        let mut converter = Converter::new(modifiers, 3300);
+        converter.set_ema_enabled(false);
+        let sample = make_sample(1000, 2);
+        let ua = converter.adc_to_ua(&sample).unwrap();
+        assert!(ua > 0.0);
     }
 
     #[test]
@@ -142,7 +182,6 @@ mod tests {
 
     #[test]
     fn convert_bits16_mixed() {
-        // D0=high D1=low D2=high D3=low ...
         assert_eq!(convert_bits16(0x55), 0x6666);
     }
 
@@ -151,7 +190,6 @@ mod tests {
         let modifiers = Modifiers::default();
         let mut converter = Converter::new(modifiers, 3300);
         let sample = make_sample(0x200, 2);
-        let _ = converter.adc_to_ua(&sample);
-        // Should not panic
+        let _ = converter.adc_to_ua(&sample).unwrap();
     }
 }

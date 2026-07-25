@@ -7,7 +7,7 @@ use crate::autosave::Autosave;
 use crate::config::Config;
 use crate::device::Ppk2Device;
 use crate::error::{Error, Result};
-use crate::transport::resolve_port;
+use crate::transport::{find_ppk2_ports, resolve_port};
 use crate::types::MeasurementStats;
 
 pub fn run(
@@ -18,8 +18,25 @@ pub fn run(
     serial: Option<&str>,
 ) -> Result<()> {
     let config = Config::load()?;
+
+    if let Some(d) = duration {
+        if d <= 0.0 {
+            return Err(Error::InvalidArg("duration must be positive".into()));
+        }
+    }
+
     let port_path = resolve_port(port, serial)?;
     let mut device = Ppk2Device::open(&port_path)?;
+
+    let serial_str = serial
+        .map(|s| s.to_string())
+        .or_else(|| {
+            find_ppk2_ports()
+                .into_iter()
+                .find(|d| d.control_port == port_path)
+                .map(|d| d.serial)
+        })
+        .unwrap_or_else(|| "unknown".to_string());
 
     let auto_power = config.behavior.auto_power.as_str();
     match auto_power {
@@ -46,17 +63,8 @@ pub fn run(
     let start = Instant::now();
     let end_time = duration.map(|d| start + std::time::Duration::from_secs_f64(d));
 
-    let serial = serial
-        .map(|s| s.to_string())
-        .or_else(|| {
-            crate::transport::find_ppk2_ports()
-                .into_iter()
-                .find(|d| d.control_port == port_path)
-                .map(|d| d.serial)
-        })
-        .unwrap_or_else(|| "unknown".to_string());
     let mut autosave = if save.is_some() || config.autosave.enabled {
-        Some(Autosave::new(&serial, &config.autosave)?)
+        Some(Autosave::new(&serial_str, &config.autosave)?)
     } else {
         None
     };
@@ -85,7 +93,13 @@ pub fn run(
             Ok(Some(raw)) => {
                 let samples = parser.feed(&[raw]);
                 for sample in samples {
-                    let ua = device.convert_sample(&sample);
+                    let ua = match device.convert_sample(&sample) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("conversion error: {}", e);
+                            continue;
+                        }
+                    };
                     count += 1;
                     sum += ua;
                     if ua < min {
@@ -102,8 +116,12 @@ pub fn run(
                 }
             }
             Ok(None) => continue,
-            Err(Error::Disconnected(_)) => {
-                let elapsed = start.elapsed().as_secs_f64();
+            Err(Error::Disconnected(e)) => {
+                let elapsed = if e == 0.0 {
+                    start.elapsed().as_secs_f64()
+                } else {
+                    e
+                };
                 if let Some(asv) = autosave.take() {
                     let _ = asv.finalize(save)?;
                 }

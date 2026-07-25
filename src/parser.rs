@@ -50,6 +50,7 @@ impl SampleParser {
                 }
                 self.gap_buffer.push(sample);
             } else {
+                self.gap_buffer.clear();
                 output.push(sample);
                 self.expected_counter = self.expected_counter.wrapping_add(1) & 0x3F;
             }

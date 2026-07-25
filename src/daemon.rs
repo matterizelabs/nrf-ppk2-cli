@@ -5,7 +5,7 @@ mod unix {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use crate::autosave::Autosave;
     use crate::config::Config;
@@ -85,53 +85,86 @@ mod unix {
             }
         }
 
+        // Graceful shutdown: wait up to 5s for measure thread
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if handle.is_finished() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                eprintln!("warning: measurement thread did not stop within 5s, forcing exit");
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
         let _ = handle.join();
         let _ = std::fs::remove_file(&sock_path);
         Ok(())
     }
 
-    fn handle_command(line: &str, state: &SharedState) -> String {
-        if line.contains("\"cmd\":\"status\"") {
-            let stats = state.stats.lock().unwrap();
-            let elapsed = stats.start.elapsed().as_secs_f64();
-            let avg = if stats.count > 0 {
-                stats.sum / stats.count as f64
-            } else {
-                0.0
-            };
-            format!(
-                r#"{{"elapsed_s":{:.1},"samples":{},"avg_ua":{:.1},"min_ua":{:.1},"max_ua":{:.1}}}"#,
-                elapsed,
-                stats.count,
-                avg,
-                if stats.min == f64::MAX {
-                    0.0
-                } else {
-                    stats.min
-                },
-                if stats.max == f64::MIN {
-                    0.0
-                } else {
-                    stats.max
-                },
-            )
-        } else if line.contains("\"cmd\":\"stop\"") {
-            if let Some(save) = extract_json_val(line, "save") {
-                *state.save_path.lock().unwrap() = Some(save);
-            }
-            state.running.store(false, Ordering::SeqCst);
-            r#"{"status":"stopping"}"#.to_string()
+    fn extract_json_val<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+        let pat = format!(r#""{}":"#, key);
+        let start = line.find(&pat)? + pat.len();
+        let rest = &line[start..];
+        if let Some(stripped) = rest.strip_prefix('"') {
+            let end = stripped.find('"')?;
+            Some(&stripped[..end])
         } else {
-            r#"{"error":"unknown command"}"#.to_string()
+            let end = rest.find(',').unwrap_or(rest.len());
+            let end = rest[..end].find('}').unwrap_or(end);
+            let val = rest[..end].trim();
+            if val.is_empty() {
+                None
+            } else {
+                Some(val)
+            }
         }
     }
 
-    fn extract_json_val(json: &str, key: &str) -> Option<String> {
-        let pat = format!(r#""{}":"#, key);
-        let rest = json.find(&pat).map(|i| &json[i + pat.len()..])?;
-        let stripped = rest.strip_prefix('"')?;
-        let end = stripped.find('"')?;
-        Some(stripped[..end].to_string())
+    fn parse_json_cmd(line: &str) -> (&str, Option<&str>) {
+        let cmd = extract_json_val(line, "cmd").unwrap_or("");
+        let save = extract_json_val(line, "save");
+        (cmd, save)
+    }
+
+    fn handle_command(line: &str, state: &SharedState) -> String {
+        let (cmd, save) = parse_json_cmd(line);
+
+        match cmd {
+            "status" => {
+                let stats = state.stats.lock().unwrap();
+                let elapsed = stats.start.elapsed().as_secs_f64();
+                let avg = if stats.count > 0 {
+                    stats.sum / stats.count as f64
+                } else {
+                    0.0
+                };
+                format!(
+                    r#"{{"elapsed_s":{:.1},"samples":{},"avg_ua":{:.1},"min_ua":{:.1},"max_ua":{:.1}}}"#,
+                    elapsed,
+                    stats.count,
+                    avg,
+                    if stats.min == f64::MAX {
+                        0.0
+                    } else {
+                        stats.min
+                    },
+                    if stats.max == f64::MIN {
+                        0.0
+                    } else {
+                        stats.max
+                    },
+                )
+            }
+            "stop" => {
+                if let Some(s) = save {
+                    *state.save_path.lock().unwrap() = Some(s.to_string());
+                }
+                state.running.store(false, Ordering::SeqCst);
+                r#"{"status":"stopping"}"#.to_string()
+            }
+            _ => r#"{"error":"unknown command"}"#.to_string(),
+        }
     }
 
     fn measure_loop(port_path: &str, serial: &str, state: &SharedState) -> Result<()> {
@@ -172,7 +205,13 @@ mod unix {
                     let samples = parser.feed(&[raw]);
                     let mut stats = state.stats.lock().unwrap();
                     for sample in samples {
-                        let ua = device.convert_sample(&sample);
+                        let ua = match device.convert_sample(&sample) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                eprintln!("conversion error: {}", e);
+                                continue;
+                            }
+                        };
                         stats.count += 1;
                         stats.sum += ua;
                         if ua < stats.min {

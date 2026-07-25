@@ -3,20 +3,10 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     DeviceNotFound,
-    #[allow(dead_code)]
-    DeviceBusy(String),
     Disconnected(f64),
     Timeout(String),
     InvalidArg(String),
-    #[allow(dead_code)]
-    FirmwareMismatch {
-        actual: String,
-        max: String,
-    },
-    PartialCapture {
-        samples: u64,
-        duration: f64,
-    },
+    PartialCapture { samples: u64, duration: f64 },
     PowerNotOn,
     Io(std::io::Error),
     Serial(serialport::Error),
@@ -27,17 +17,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceNotFound => write!(f, "device not found"),
-            Self::DeviceBusy(s) => write!(f, "device busy: {}", s),
             Self::Disconnected(t) => write!(f, "device disconnected at {:.1}s", t),
             Self::Timeout(s) => write!(f, "device not responding: {}", s),
             Self::InvalidArg(s) => write!(f, "invalid argument: {}", s),
-            Self::FirmwareMismatch { actual, max } => {
-                write!(
-                    f,
-                    "firmware {} may be incompatible (tested up to {})",
-                    actual, max
-                )
-            }
             Self::PartialCapture { samples, duration } => {
                 write!(f, "partial capture: {} samples ({:.1}s)", samples, duration)
             }
@@ -53,6 +35,24 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl Error {
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            Self::DeviceNotFound | Self::InvalidArg(_) | Self::PowerNotOn => "USER_ERROR",
+            Self::Disconnected(_) | Self::Timeout(_) => "DEVICE_ERROR",
+            _ => "INTERNAL_ERROR",
+        }
+    }
+
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::DeviceNotFound | Self::InvalidArg(_) | Self::PowerNotOn => 1,
+            Self::Disconnected(_) | Self::Timeout(_) => 2,
+            _ => 3,
+        }
+    }
+}
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {

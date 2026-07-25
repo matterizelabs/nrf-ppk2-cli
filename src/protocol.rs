@@ -1,5 +1,5 @@
 pub enum Command {
-    TriggerSet { level_ua: u16 },
+    TriggerSet { level_ua: u32 },
     AvgNumSet { count: u8 },
     TriggerWindowSet { window: u8 },
     TriggerIntervalSet { interval: u8 },
@@ -26,9 +26,8 @@ impl Command {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Self::TriggerSet { level_ua } => {
-                let b = (level_ua >> 8) as u8;
-                let c = (level_ua & 0xFF) as u8;
-                vec![0x01, b, c]
+                let level_ua = *level_ua;
+                vec![0x01, (level_ua >> 8) as u8, (level_ua & 0xFF) as u8]
             }
             Self::AvgNumSet { count } => vec![0x02, *count],
             Self::TriggerWindowSet { window } => vec![0x03, *window],

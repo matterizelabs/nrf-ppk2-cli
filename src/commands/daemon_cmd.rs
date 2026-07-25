@@ -12,16 +12,31 @@ fn resolve_daemon_serial(serial: Option<&str>) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-pub fn run_start(_json: bool, port: Option<&str>, serial: Option<&str>) -> Result<()> {
+fn escape_json(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+pub fn run_start(json: bool, port: Option<&str>, serial: Option<&str>) -> Result<()> {
     let port_path = resolve_port(port, serial)?;
     let sn = resolve_daemon_serial(serial);
-    daemon::run_daemon(&port_path, &sn)
+    if json {
+        let sock_path = daemon::socket_path(&sn);
+        daemon::run_daemon(&port_path, &sn)?;
+        println!(
+            r#"{{"socket":"{}","pid":{}}}"#,
+            sock_path.display(),
+            std::process::id()
+        );
+    } else {
+        daemon::run_daemon(&port_path, &sn)?;
+    }
+    Ok(())
 }
 
 pub fn run_stop(json: bool, save: Option<&str>, serial: Option<&str>) -> Result<()> {
     let sn = resolve_daemon_serial(serial);
     let cmd = if let Some(sp) = save {
-        format!(r#"{{"cmd":"stop","save":"{}"}}"#, sp)
+        format!(r#"{{"cmd":"stop","save":"{}"}}"#, escape_json(sp))
     } else {
         r#"{"cmd":"stop"}"#.to_string()
     };

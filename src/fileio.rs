@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 
 use crate::conversion::convert_bits16;
 use crate::error::Result;
@@ -124,20 +124,21 @@ impl FoldingBuffer {
     }
 
     fn to_json(&self) -> String {
-        let mut buf = String::with_capacity(self.length * 64 + 150);
-        let _ = write!(buf, r#""length":{},"min":["#, self.length);
-        for i in 0..MAX_MINIMAP_ELEMENTS {
+        let len = self.length;
+        let mut buf = String::with_capacity(len * 128 + 200);
+        let _ = write!(buf, r#""length":{},"min":["#, len);
+        for i in 0..len {
             if i > 0 {
                 buf.push(',');
             }
-            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.min[i].x, self.min[i].y,);
+            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.min[i].x, self.min[i].y);
         }
         buf.push_str(r#"],"max":["#);
-        for i in 0..MAX_MINIMAP_ELEMENTS {
+        for i in 0..len {
             if i > 0 {
                 buf.push(',');
             }
-            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.max[i].x, self.max[i].y,);
+            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.max[i].x, self.max[i].y);
         }
         buf.push(']');
         format!(
@@ -187,20 +188,29 @@ pub fn read_ppk2(path: &str) -> Result<Vec<(f32, u8)>> {
 
 pub fn export_csv(ppk2_path: &str, csv_path: &str) -> Result<()> {
     let frames = read_ppk2(ppk2_path)?;
-    let mut output = String::from("timestamp_us,current_ua,D0,D1,D2,D3,D4,D5,D6,D7\n");
+    let file = std::fs::File::create(csv_path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(b"timestamp_us,current_ua,D0,D1,D2,D3,D4,D5,D6,D7\n")?;
 
     for (i, (ua, logic)) in frames.iter().enumerate() {
         let ts = i as u64 * 10;
-        output.push_str(&format!("{},", ts));
-        output.push_str(&format!("{:.3},", ua));
-        for bit in 0..8 {
-            output.push_str(if (logic >> bit) & 1 == 1 { "1," } else { "0," });
-        }
-        output.pop();
-        output.push('\n');
+        let row = format!(
+            "{},{:.3},{},{},{},{},{},{},{},{}\n",
+            ts,
+            ua,
+            logic & 1,
+            (logic >> 1) & 1,
+            (logic >> 2) & 1,
+            (logic >> 3) & 1,
+            (logic >> 4) & 1,
+            (logic >> 5) & 1,
+            (logic >> 6) & 1,
+            (logic >> 7) & 1,
+        );
+        writer.write_all(row.as_bytes())?;
     }
 
-    std::fs::write(csv_path, output)?;
+    writer.flush()?;
     Ok(())
 }
 
