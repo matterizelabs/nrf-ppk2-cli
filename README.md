@@ -11,7 +11,7 @@ curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/inst
 Install a specific version:
 
 ```
-curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/install.sh | bash -s -- v0.1.2
+curl -sSL https://raw.githubusercontent.com/matterizelabs/nrf-ppk2-cli/main/install.sh | bash -s -- v0.2.0
 ```
 
 Default install path is `$HOME/.local/bin`. Override with `INSTALL_DIR`:
@@ -45,18 +45,12 @@ ppk2 list
 ppk2 list --json
 ```
 
-Output:
-
-```
-F057566F0FD6  control=/dev/ttyACM0  data=/dev/ttyACM1
-```
-
 ### Device setup
 
 ```
 ppk2 mode source       # DUT powered by PPK2
 ppk2 mode ampere       # DUT powered externally
-ppk2 voltage 3300      # Set VDD to 3.3V (800–5000mV, source mode only)
+ppk2 voltage 3300      # Set VDD to 3.3V (800–5000mV)
 ppk2 power on          # Enable DUT power
 ppk2 power off         # Disable DUT power
 ```
@@ -64,16 +58,25 @@ ppk2 power off         # Disable DUT power
 ### Measure
 
 ```
-ppk2 measure                      # Run until Ctrl+C (live stats on stderr)
-ppk2 measure --duration 5         # Measure for 5 seconds
+ppk2 measure                           # Run until Ctrl+C (live stats on stderr)
+ppk2 measure --duration 5              # 5 seconds, full 100ksps
 ppk2 measure --duration 10 --save out.ppk2
-ppk2 measure --duration 5 --json  # JSON summary only (no live output)
+ppk2 measure --duration 5 --json       # JSON summary only (no live output)
+ppk2 measure --rate 1000               # Downsample to 1ksps
+ppk2 measure --rate 100 --save slow.ppk2
 ```
 
-Live status line updates in-place every 500ms:
+| Flag | Description |
+|------|-------------|
+| `-d, --duration` | Seconds to measure (omitted = run until Ctrl+C) |
+| `--save` | Save to .ppk2 file |
+| `-r, --rate` | Downsample to N samples/sec (default: 100000). Rates not dividing 100000 evenly are rounded to nearest divisor |
+| `--json` | JSON summary instead of text |
+
+Live status updates in-place every 500ms:
 
 ```
-2.5s  avg 41.9mA  #250880  138.4mW
+2.5s  avg 41.9uA  138.4uW
 ```
 
 Text summary:
@@ -82,17 +85,9 @@ Text summary:
 duration 5.0s  samples 500000  avg 42.3uA  charge 0.059uAh  power 140uW
 ```
 
-JSON summary:
-
-```json
-{"duration_s":5.0,"samples":500000,"avg_ua":42.300,"charge_uah":0.058750,"power_uw":139.6,"min_ua":1.200,"max_ua":15000.000}
-```
-
-Current limit warnings: >400mA warns to connect both USB ports; >580mA warns to switch to ampere mode.
-
 ### Trigger (analog threshold)
 
-Capture spikes with pre/post-trigger buffering:
+Capture spikes with pre/post-trigger buffering at full 100ksps:
 
 ```
 ppk2 trigger --threshold 5000 --edge rising
@@ -104,9 +99,9 @@ ppk2 trigger --threshold 100 --edge both --save spike.ppk2
 |------|-------------|
 | `-t, --threshold` | Current threshold in uA |
 | `-e, --edge` | `rising`, `falling`, `both` (default: `rising`) |
-| `--pre-trigger` | Samples (ms) before trigger (default: 100) |
-| `--post-trigger` | Samples (ms) after trigger (default: 1000) |
-| `--save` | Save to .ppk2 file |
+| `--pre-trigger` | Milliseconds before trigger (default: 100) |
+| `--post-trigger` | Milliseconds after trigger (default: 1000) |
+| `--save` | Save captured window to .ppk2 file |
 
 ### File operations
 
@@ -121,16 +116,17 @@ ppk2 convert capture.ppk2 --output out.csv
 
 ### Daemon
 
-Long-running background measurement with realtime status:
+Long-running background measurement. Forks to background, communicates via Unix socket:
 
 ```
-ppk2 daemon start                   # background, prints socket path + PID
-ppk2 daemon status                  # realtime stats (JSON)
-ppk2 daemon stop                    # stop and finalize autosave
-ppk2 daemon stop --save out.ppk2    # stop with named .ppk2 file
+ppk2 daemon start                    # Background, prints socket path + PID
+ppk2 daemon status                   # Realtime stats (JSON)
+ppk2 daemon stop                     # Stop and finalize autosave
+ppk2 daemon stop --save out.ppk2     # Stop with named .ppk2 file
+ppk2 daemon start --rate 100         # Background daemon at 100sps
 ```
 
-Communicates via Unix socket at `~/.local/state/ppk2/<serial>/daemon.sock`.
+Socket at `~/.local/state/ppk2/<serial>/daemon.sock`. Autosave writes `.ppk2` files to `~/.local/share/ppk2/autosave/<serial>/`.
 
 ### Firmware
 
@@ -138,11 +134,13 @@ Communicates via Unix socket at `~/.local/state/ppk2/<serial>/daemon.sock`.
 ppk2 firmware info
 ```
 
-Reads firmware version from device metadata.
+Outputs firmware version and calibration status:
+
+```
+firmware: PCA63100 v1.2.4-db16a94 (calibrated)
+```
 
 ### Recover
-
-Recover orphaned autosaves after crash or disconnect:
 
 ```
 ppk2 recover
@@ -150,11 +148,13 @@ ppk2 recover --serial F057566F0FD6
 ppk2 recover --json
 ```
 
+Lists orphaned autosave files from crashed/disconnected sessions.
+
 ## Config
 
-Optional. Run `ppk2 config init` to create `~/.config/ppk2/config.toml`. Defaults are used if no file exists. View with `ppk2 config show`.
+Optional. Run `ppk2 config init` to create `~/.config/ppk2/config.toml`. Defaults used if no file exists. View with `ppk2 config show`.
 
-```
+```toml
 [defaults]
 mode = "source"
 voltage_mv = 3300
@@ -173,13 +173,13 @@ Env var overrides: `PPK2_VOLTAGE`, `PPK2_MODE`, `PPK2_AUTOSAVE_DIR`, `PPK2_PORT`
 
 ## Example workflows
 
-Measure BLE sleep current:
+Measure BLE sleep current at 100sps for long session:
 
 ```
 ppk2 mode source
 ppk2 voltage 3000
 ppk2 power on
-ppk2 measure --duration 30 --save sleep.ppk2
+ppk2 measure --rate 100 --duration 300 --save sleep.ppk2
 ppk2 info sleep.ppk2
 ```
 
@@ -193,11 +193,12 @@ ppk2 trigger --threshold 15000 --pre-trigger 50 --post-trigger 200 --save tx.ppk
 ppk2 convert tx.ppk2 --output tx.csv
 ```
 
-Long-term logging:
+Long-term background logging:
 
 ```
-ppk2 daemon start
+ppk2 daemon start --rate 10
 # ... hours/days pass ...
+ppk2 daemon status
 ppk2 daemon stop --save long_run.ppk2
 ```
 
@@ -206,4 +207,8 @@ ppk2 daemon stop --save long_run.ppk2
 ```
 nix develop
 cargo build --release
+cargo test
+cargo clippy -- -D warnings
 ```
+
+HIL tests (`tests/hil.rs`) require a physical PPK2: `cargo test -- --test-threads=1`.
