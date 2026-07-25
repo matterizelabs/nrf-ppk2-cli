@@ -57,11 +57,19 @@ enum Commands {
     /// Measure current
     #[command(about = "Measure current at 100ksps. Use --rate to downsample.")]
     Measure {
-        #[arg(short = 'd', long, help = "Seconds to measure (omitted = run until Ctrl+C)")]
+        #[arg(
+            short = 'd',
+            long,
+            help = "Seconds to measure (omitted = run until Ctrl+C)"
+        )]
         duration: Option<f64>,
         #[arg(long, help = "Save to .ppk2 file")]
         save: Option<String>,
-        #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
+        #[arg(
+            short = 'r',
+            long,
+            help = "Downsample to N samples/sec (default: 100000)"
+        )]
         rate: Option<u32>,
     },
     /// Show summary of a .ppk2 file
@@ -70,15 +78,30 @@ enum Commands {
         file: String,
     },
     /// Capture a spike with pre/post-trigger buffering
-    #[command(about = "Capture a current spike. Set --threshold above baseline to trigger on peaks.")]
+    #[command(
+        about = "Capture a current spike. Set --threshold above baseline to trigger on peaks."
+    )]
     Trigger {
         #[arg(short = 't', long, help = "Current threshold in uA")]
         threshold: f64,
-        #[arg(short = 'e', long, default_value = "rising", help = "rising, falling, or both")]
+        #[arg(
+            short = 'e',
+            long,
+            default_value = "rising",
+            help = "rising, falling, or both"
+        )]
         edge: String,
-        #[arg(long, default_value = "100", help = "Milliseconds before trigger to capture")]
+        #[arg(
+            long,
+            default_value = "100",
+            help = "Milliseconds before trigger to capture"
+        )]
         pre_trigger: u64,
-        #[arg(long, default_value = "1000", help = "Milliseconds after trigger to capture")]
+        #[arg(
+            long,
+            default_value = "1000",
+            help = "Milliseconds after trigger to capture"
+        )]
         post_trigger: u64,
         #[arg(long, help = "Save captured window to .ppk2 file")]
         save: Option<String>,
@@ -95,9 +118,7 @@ enum Commands {
     #[command(subcommand)]
     Daemon(DaemonCmd),
     /// List orphaned autosave files
-    Recover {
-        serial: Option<String>,
-    },
+    Recover { serial: Option<String> },
     /// Export .ppk2 file to CSV
     Convert {
         #[arg(required = true, help = "Path to .ppk2 file")]
@@ -119,18 +140,13 @@ enum Commands {
     },
     /// Set firmware averaging count
     #[command(name = "avg-num")]
-    AvgNum {
-        count: u8,
-    },
+    AvgNum { count: u8 },
     /// Set auto-range switch points
     #[command(subcommand)]
     SwitchPoint(SwitchPointCmd),
     /// Set custom calibration resistor
     #[command(name = "cal-set")]
-    CalSet {
-        range: u8,
-        ohms: f32,
-    },
+    CalSet { range: u8, ohms: f32 },
     /// Firmware-level trigger controls
     #[command(subcommand)]
     FwTrigger(FwTriggerCmd),
@@ -159,7 +175,11 @@ enum FirmwareCmd {
 enum DaemonCmd {
     /// Start daemon in background
     Start {
-        #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
+        #[arg(
+            short = 'r',
+            long,
+            help = "Downsample to N samples/sec (default: 100000)"
+        )]
         rate: Option<u32>,
     },
     /// Stop daemon and finalize autosave
