@@ -25,44 +25,135 @@ pub fn write_ppk2(path: &str, frames: &[(f32, u8)], start_time_ms: u64) -> Resul
     zip.start_file("metadata.json", options)?;
     zip.write_all(metadata.as_bytes())?;
 
-    zip.start_file("minimap.json", options)?;
+    zip.start_file("minimap.raw", options)?;
     zip.write_all(build_minimap(frames).as_bytes())?;
 
     zip.finish()?;
     Ok(())
 }
 
-fn build_minimap(frames: &[(f32, u8)]) -> String {
-    let step = (frames.len() / 10_000).max(1);
-    let entries = frames.len() / step + usize::from(!frames.len().is_multiple_of(step));
-    let mut buf = String::with_capacity(entries * 32 + 100);
-    buf.push('[');
-    let mut first = true;
-    for chunk in frames.chunks(step) {
-        let mut min_na = i64::MAX;
-        let mut max_na = i64::MIN;
-        for &(ua, _) in chunk {
-            let na = (ua as f64 * 1000.0) as i64;
-            if na < min_na {
-                min_na = na;
-            }
-            if na > max_na {
-                max_na = na;
-            }
+const MAX_MINIMAP_ELEMENTS: usize = 10_000;
+
+#[derive(Clone, Copy)]
+struct MinimapPoint {
+    x: f64,
+    y: f64,
+}
+
+struct FoldingBuffer {
+    times_folded: usize,
+    last_fold_count: usize,
+    min: [MinimapPoint; MAX_MINIMAP_ELEMENTS],
+    max: [MinimapPoint; MAX_MINIMAP_ELEMENTS],
+    length: usize,
+}
+
+impl FoldingBuffer {
+    fn new() -> Self {
+        Self {
+            times_folded: 1,
+            last_fold_count: 0,
+            min: [MinimapPoint { x: 0.0, y: 0.0 }; MAX_MINIMAP_ELEMENTS],
+            max: [MinimapPoint { x: 0.0, y: 0.0 }; MAX_MINIMAP_ELEMENTS],
+            length: 0,
         }
-        let min_na = min_na.max(200);
-        let max_na = max_na.max(200);
-        if !first {
-            buf.push(',');
-        }
-        first = false;
-        let _ = write!(buf, r#"{{"min":{},"max":{}}}"#, min_na, max_na);
     }
-    buf.push(']');
-    format!(
-        r#"{{"lastElementFoldCount":0,"maxNumberOfElements":10000,"numberOfTimesToFold":1,"data":{}}}"#,
-        buf,
-    )
+
+    fn add_data(&mut self, value_ua: f64, timestamp: f64) {
+        if self.last_fold_count == 0 {
+            self.min[self.length] = MinimapPoint {
+                x: timestamp,
+                y: f64::MAX,
+            };
+            self.max[self.length] = MinimapPoint {
+                x: timestamp,
+                y: f64::MIN,
+            };
+            self.length += 1;
+        }
+
+        let mut value = value_ua * 1000.0;
+        if value < 200.0 {
+            value = 200.0;
+        }
+
+        self.last_fold_count += 1;
+        let alpha = 1.0 / self.last_fold_count as f64;
+        let i = self.length - 1;
+
+        self.min[i] = MinimapPoint {
+            x: timestamp * alpha + self.min[i].x * (1.0 - alpha),
+            y: if value.is_finite() {
+                value.min(self.min[i].y)
+            } else {
+                self.min[i].y
+            },
+        };
+        self.max[i] = MinimapPoint {
+            x: timestamp * alpha + self.max[i].x * (1.0 - alpha),
+            y: if value.is_finite() {
+                value.max(self.max[i].y)
+            } else {
+                self.max[i].y
+            },
+        };
+
+        if self.last_fold_count == self.times_folded {
+            self.last_fold_count = 0;
+        }
+
+        if self.length == MAX_MINIMAP_ELEMENTS {
+            self.fold();
+        }
+    }
+
+    fn fold(&mut self) {
+        self.times_folded *= 2;
+        for i in 0..self.length / 2 {
+            let idx = i * 2;
+            self.min[i] = MinimapPoint {
+                x: (self.min[idx].x + self.min[idx + 1].x) / 2.0,
+                y: self.min[idx].y.min(self.min[idx + 1].y),
+            };
+            self.max[i] = MinimapPoint {
+                x: (self.max[idx].x + self.max[idx + 1].x) / 2.0,
+                y: self.max[idx].y.max(self.max[idx + 1].y),
+            };
+        }
+        self.length /= 2;
+    }
+
+    fn to_json(&self) -> String {
+        let mut buf = String::with_capacity(self.length * 64 + 150);
+        let _ = write!(buf, r#""length":{},"min":["#, self.length);
+        for i in 0..MAX_MINIMAP_ELEMENTS {
+            if i > 0 {
+                buf.push(',');
+            }
+            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.min[i].x, self.min[i].y,);
+        }
+        buf.push_str(r#"],"max":["#);
+        for i in 0..MAX_MINIMAP_ELEMENTS {
+            if i > 0 {
+                buf.push(',');
+            }
+            let _ = write!(buf, r#"{{"x":{},"y":{}}}"#, self.max[i].x, self.max[i].y,);
+        }
+        buf.push(']');
+        format!(
+            r#"{{"lastElementFoldCount":{},"data":{{{}}},"maxNumberOfElements":{},"numberOfTimesToFold":{}}}"#,
+            self.last_fold_count, buf, MAX_MINIMAP_ELEMENTS, self.times_folded,
+        )
+    }
+}
+
+fn build_minimap(frames: &[(f32, u8)]) -> String {
+    let mut fb = FoldingBuffer::new();
+    for (i, &(ua, _)) in frames.iter().enumerate() {
+        let timestamp = (i as u64 * 10) as f64;
+        fb.add_data(ua as f64, timestamp);
+    }
+    fb.to_json()
 }
 
 pub fn read_ppk2(path: &str) -> Result<Vec<(f32, u8)>> {
