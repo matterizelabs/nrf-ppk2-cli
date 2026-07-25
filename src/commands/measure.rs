@@ -54,18 +54,17 @@ pub fn run(
     let start = Instant::now();
     let end_time = duration.map(|d| start + std::time::Duration::from_secs_f64(d));
 
-    let mut autosave = if save.is_some() || config.autosave.enabled {
-        Some(Autosave::new(&serial_str, &config.autosave)?)
-    } else {
-        None
-    };
-
     let mut downsampler = rate.map(crate::downsample::Downsampler::new);
     let sample_rate = downsampler
         .as_ref()
         .map(|d| d.actual_rate())
         .unwrap_or(100_000);
-    let _ = sample_rate; // used in Task 5
+
+    let mut autosave = if save.is_some() || config.autosave.enabled {
+        Some(Autosave::new(&serial_str, &config.autosave, sample_rate)?)
+    } else {
+        None
+    };
 
     let mut count: u64 = 0;
     let mut sum: f64 = 0.0;

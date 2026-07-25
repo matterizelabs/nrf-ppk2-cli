@@ -62,7 +62,7 @@ pub fn run(
     let mut engine = TriggerEngine::new(trigger_config);
 
     let mut autosave = if save.is_some() || config.autosave.enabled {
-        Some(Autosave::new(&serial_str, &config.autosave)?)
+        Some(Autosave::new(&serial_str, &config.autosave, 100_000)?)
     } else {
         None
     };

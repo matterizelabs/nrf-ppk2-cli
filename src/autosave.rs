@@ -137,10 +137,11 @@ pub struct Autosave {
     raw_path: PathBuf,
     raw_file: Option<std::fs::File>,
     page_buf: Vec<u8>,
+    samples_per_second: u32,
 }
 
 impl Autosave {
-    pub fn new(serial: &str, config: &AutosaveConfig) -> Result<Self> {
+    pub fn new(serial: &str, config: &AutosaveConfig, rate: u32) -> Result<Self> {
         let dir = if let Some(ref d) = config.dir {
             PathBuf::from(d)
         } else {
@@ -165,6 +166,7 @@ impl Autosave {
             raw_path,
             raw_file,
             page_buf: Vec::with_capacity(PAGE_FRAMES * 6),
+            samples_per_second: rate,
         })
     }
 
@@ -213,7 +215,7 @@ impl Autosave {
                 &self.raw_path.to_string_lossy(),
                 &minimap_json,
                 self.start_time_ms,
-                100_000,
+                self.samples_per_second,
             )?;
             if std::fs::rename(tmp_str, sp).is_err() {
                 std::fs::copy(tmp_str, sp)?;
@@ -230,7 +232,7 @@ impl Autosave {
                 &self.raw_path.to_string_lossy(),
                 &minimap_json,
                 self.start_time_ms,
-                100_000,
+                self.samples_per_second,
             )?;
             std::fs::rename(tmp_str, &self.path)?;
             let _ = std::fs::remove_file(&self.raw_path);

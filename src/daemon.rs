@@ -188,7 +188,7 @@ mod unix {
         device.start_measurement()?;
 
         let mut autosave = if config.autosave.enabled {
-            Some(Autosave::new(serial, &config.autosave)?)
+            Some(Autosave::new(serial, &config.autosave, 100_000)?)
         } else {
             None
         };
