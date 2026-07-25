@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use crate::daemon;
 use crate::error::Result;
 use crate::transport::{find_ppk2_ports, resolve_port};
@@ -26,18 +28,38 @@ pub fn run_start(
     serial: Option<&str>,
     rate: Option<u32>,
 ) -> Result<()> {
-    let (port_path, _) = resolve_port(port, serial)?;
-    let sn = resolve_daemon_serial(serial);
+    let (port_path, sn) = resolve_port(port, serial)?;
+    let sock = daemon::socket_path(&sn);
+
+    if std::env::var("PPK2_DAEMONIZED").is_ok() {
+        daemon::run_daemon(&port_path, &sn, rate)?;
+        return Ok(());
+    }
+
+    let exe = std::env::current_exe()?;
+    let mut cmd = Command::new(exe);
+    cmd.arg("daemon")
+        .arg("start")
+        .arg("--port")
+        .arg(&port_path)
+        .arg("--serial")
+        .arg(&sn)
+        .env("PPK2_DAEMONIZED", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    if let Some(r) = rate {
+        cmd.arg("--rate").arg(r.to_string());
+    }
+
+    let pid = cmd.spawn()?.id();
+
     if json {
-        let sock_path = daemon::socket_path(&sn);
-        daemon::run_daemon(&port_path, &sn, rate)?;
-        println!(
-            r#"{{"socket":"{}","pid":{}}}"#,
-            sock_path.display(),
-            std::process::id()
-        );
+        println!(r#"{{"socket":"{}","pid":{}}}"#, sock.display(), pid,);
     } else {
-        daemon::run_daemon(&port_path, &sn, rate)?;
+        println!("{}", sock.display());
+        println!("{}", pid);
     }
     Ok(())
 }
