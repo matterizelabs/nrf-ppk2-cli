@@ -49,9 +49,10 @@ pub fn run_stop(json: bool, save: Option<&str>, serial: Option<&str>) -> Result<
     Ok(())
 }
 
-pub fn run_status(_json: bool, serial: Option<&str>) -> Result<()> {
+pub fn run_status(json: bool, serial: Option<&str>) -> Result<()> {
     let sn = resolve_daemon_serial(serial);
     let resp = daemon::send_command(&sn, r#"{"cmd":"status"}"#)?;
+    let _ = json;
     println!("{}", resp);
     Ok(())
 }

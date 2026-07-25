@@ -100,8 +100,7 @@ pub fn run(
                     }
 
                     if let Some(ref mut asv) = autosave {
-                        asv.push((ua as f32, sample.logic));
-                        asv.maybe_flush();
+                        asv.push((ua as f32, sample.logic))?;
                     }
                 }
             }

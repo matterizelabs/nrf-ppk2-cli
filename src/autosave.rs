@@ -1,13 +1,15 @@
 use std::fmt::Write as _;
+use std::io::Write as IoWrite;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::AutosaveConfig;
+use crate::conversion::convert_bits16;
 use crate::error::Result;
 use crate::fileio;
 
 const MAX_MINIMAP_ELEMENTS: usize = 10_000;
+const PAGE_FRAMES: usize = 10_000;
 
 #[derive(Clone, Copy)]
 struct MinimapPoint {
@@ -130,14 +132,11 @@ impl FoldingBuffer {
 
 pub struct Autosave {
     path: PathBuf,
-    enabled: bool,
-    interval_s: u64,
-    last_flush_count: usize,
-    total_frames: usize,
-    frames: Vec<(f32, u8)>,
-    chunks: Vec<Arc<Vec<(f32, u8)>>>,
     start_time_ms: u64,
     minimap: FoldingBuffer,
+    raw_path: PathBuf,
+    raw_file: Option<std::fs::File>,
+    page_buf: Vec<u8>,
 }
 
 impl Autosave {
@@ -156,46 +155,52 @@ impl Autosave {
             .as_secs();
         let start_time_ms = secs * 1000;
         let path = dir.join(format!("ppk2-{}.ppk2", secs));
+        let raw_path = dir.join(format!("ppk2-{}.raw", secs));
+        let raw_file = Some(std::fs::File::create(&raw_path)?);
 
         Ok(Self {
             path,
-            enabled: config.enabled,
-            interval_s: config.interval_s,
-            last_flush_count: 0,
-            total_frames: 0,
-            frames: Vec::new(),
-            chunks: Vec::new(),
             start_time_ms,
             minimap: FoldingBuffer::new(),
+            raw_path,
+            raw_file,
+            page_buf: Vec::with_capacity(PAGE_FRAMES * 6),
         })
     }
 
-    pub fn push(&mut self, frame: (f32, u8)) {
+    pub fn push(&mut self, frame: (f32, u8)) -> Result<()> {
         self.minimap.add_data(frame.0 as f64);
-        self.frames.push(frame);
-        self.total_frames += 1;
+
+        let ua = if frame.0 < 0.2 { 0.0f32 } else { frame.0 };
+        let bits16 = convert_bits16(frame.1);
+        self.page_buf.extend_from_slice(&ua.to_le_bytes());
+        self.page_buf.extend_from_slice(&bits16.to_le_bytes());
+
+        if self.page_buf.len() >= PAGE_FRAMES * 6 {
+            if let Some(ref mut file) = self.raw_file {
+                file.write_all(&self.page_buf)?;
+            }
+            self.page_buf.clear();
+        }
+        Ok(())
     }
 
-    pub fn maybe_flush(&mut self) {
-        if !self.enabled {
-            return;
+    fn flush_page(&mut self) -> Result<()> {
+        if let Some(ref mut file) = self.raw_file {
+            if !self.page_buf.is_empty() {
+                file.write_all(&self.page_buf)?;
+            }
+            file.flush()?;
         }
-        let since = self.total_frames - self.last_flush_count;
-        if since < (100_000 * self.interval_s as usize) {
-            return;
-        }
-        let chunk = Arc::new(std::mem::take(&mut self.frames));
-        self.chunks.push(chunk);
-        self.last_flush_count = self.total_frames;
+        self.page_buf.clear();
+        Ok(())
     }
 
-    pub fn finalize(self, save_path: Option<&str>) -> Result<String> {
-        let total: usize = self.chunks.iter().map(|c| c.len()).sum::<usize>() + self.frames.len();
-        let mut all = Vec::with_capacity(total);
-        for chunk in &self.chunks {
-            all.extend_from_slice(chunk);
-        }
-        all.extend_from_slice(&self.frames);
+    pub fn finalize(mut self, save_path: Option<&str>) -> Result<String> {
+        self.flush_page()?;
+        let file = self.raw_file.take().expect("raw_file must be Some");
+        file.sync_all()?;
+        drop(file);
 
         let minimap_json = self.minimap.to_json();
 
@@ -203,18 +208,30 @@ impl Autosave {
             let dest = std::path::Path::new(sp);
             let tmp = dest.with_extension("ppk2.tmp");
             let tmp_str = tmp.to_str().unwrap_or("autosave.tmp.ppk2");
-            fileio::write_ppk2(tmp_str, &all, &minimap_json, self.start_time_ms)?;
+            fileio::write_ppk2_from_raw(
+                tmp_str,
+                &self.raw_path.to_string_lossy(),
+                &minimap_json,
+                self.start_time_ms,
+            )?;
             if std::fs::rename(tmp_str, sp).is_err() {
                 std::fs::copy(tmp_str, sp)?;
                 let _ = std::fs::remove_file(tmp_str);
             }
+            let _ = std::fs::remove_file(&self.raw_path);
             let _ = std::fs::remove_file(&self.path);
             Ok(sp.to_string())
         } else {
             let tmp_path = self.path.with_extension("ppk2.tmp");
             let tmp_str = tmp_path.to_str().unwrap_or("autosave.tmp.ppk2");
-            fileio::write_ppk2(tmp_str, &all, &minimap_json, self.start_time_ms)?;
+            fileio::write_ppk2_from_raw(
+                tmp_str,
+                &self.raw_path.to_string_lossy(),
+                &minimap_json,
+                self.start_time_ms,
+            )?;
             std::fs::rename(tmp_str, &self.path)?;
+            let _ = std::fs::remove_file(&self.raw_path);
             Ok(self.path.to_string_lossy().to_string())
         }
     }

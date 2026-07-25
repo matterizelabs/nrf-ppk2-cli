@@ -3,6 +3,7 @@ use std::io::{BufWriter, Write};
 use crate::conversion::convert_bits16;
 use crate::error::Result;
 
+#[allow(dead_code)]
 pub fn write_ppk2(
     path: &str,
     frames: &[(f32, u8)],
@@ -15,11 +16,56 @@ pub fn write_ppk2(
         .compression_method(zip::CompressionMethod::Deflated);
 
     zip.start_file("session.raw", options)?;
+    const WRITE_CHUNK: usize = 4096;
+    let mut buf = Vec::with_capacity(WRITE_CHUNK * 6);
     for &(current_ua, logic) in frames {
         let ua = if current_ua < 0.2 { 0.0f32 } else { current_ua };
         let bits16 = convert_bits16(logic);
-        zip.write_all(&ua.to_le_bytes())?;
-        zip.write_all(&bits16.to_le_bytes())?;
+        buf.extend_from_slice(&ua.to_le_bytes());
+        buf.extend_from_slice(&bits16.to_le_bytes());
+        if buf.len() >= WRITE_CHUNK * 6 {
+            zip.write_all(&buf)?;
+            buf.clear();
+        }
+    }
+    if !buf.is_empty() {
+        zip.write_all(&buf)?;
+    }
+
+    let metadata = format!(
+        r#"{{"metadata":{{"samplesPerSecond":100000,"startSystemTime":{}}},"formatVersion":2}}"#,
+        start_time_ms,
+    );
+    zip.start_file("metadata.json", options)?;
+    zip.write_all(metadata.as_bytes())?;
+
+    zip.start_file("minimap.raw", options)?;
+    zip.write_all(minimap_json.as_bytes())?;
+
+    zip.finish()?;
+    Ok(())
+}
+
+pub fn write_ppk2_from_raw(
+    path: &str,
+    raw_path: &str,
+    minimap_json: &str,
+    start_time_ms: u64,
+) -> Result<()> {
+    let output = std::fs::File::create(path)?;
+    let mut zip = zip::ZipWriter::new(output);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    zip.start_file("session.raw", options)?;
+    let mut raw = std::fs::File::open(raw_path)?;
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = std::io::Read::read(&mut raw, &mut buf)?;
+        if n == 0 {
+            break;
+        }
+        zip.write_all(&buf[..n])?;
     }
 
     let metadata = format!(

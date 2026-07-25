@@ -225,9 +225,8 @@ mod unix {
                     }
                     if let Some(ref mut asv) = autosave {
                         for (ua, logic) in converted {
-                            asv.push((ua as f32, logic));
+                            asv.push((ua as f32, logic))?;
                         }
-                        asv.maybe_flush();
                     }
                 }
                 Ok(None) => continue,
