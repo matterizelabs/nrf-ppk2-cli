@@ -1,6 +1,6 @@
 ---
 name: ppk2-cli
-description: Use for controlling Nordic Power Profiler Kit II via the ppk2 CLI. Covers device setup, measurement (live status, JSON output), analog trigger, daemon mode with IPC, firmware info, file operations (info/report/convert), autosave recovery, config management, and common workflows.
+description: Use for controlling Nordic Power Profiler Kit II via the ppk2 CLI. Covers device setup, measurement (live status, downsampling, JSON output), analog trigger, daemon mode with background spawn, firmware info, file operations (info/report/convert), autosave recovery, config management, and common workflows.
 ---
 
 # ppk2 CLI
@@ -26,18 +26,17 @@ If `--serial` is given, ppk2 auto-discovers the port. If neither flag given, use
 ppk2 list
 ppk2 list --json
 ```
-Returns serial with control and data ports. Output:
+Output:
 ```
-F057566F0FD6  control=/dev/ttyACM0  data=/dev/ttyACM1
+F057566F0FD6  /dev/ttyACM0
 ```
-JSON: `[{"serial":"F057566F0FD6","control":"/dev/ttyACM0","data":"/dev/ttyACM1"}]`
+JSON: `[{"serial":"F057566F0FD6","port":"/dev/ttyACM0"}]`
 
 ### Set measurement mode
 ```
 ppk2 mode source    # DUT powered by PPK2 (up to ~600mA)
 ppk2 mode ampere    # DUT powered externally (measures current only)
 ```
-Source mode: PPK2 supplies VDD set by `voltage`. Ampere mode: PPK2 measures current passing through its Ampere Meter jack.
 
 ### Set output voltage
 ```
@@ -54,17 +53,24 @@ ppk2 power off      # Disable DUT power output
 
 ## Measurement
 
-### Basic measurement
 ```
 ppk2 measure                      # Run until Ctrl+C (live stats on stderr)
-ppk2 measure --duration 5         # Measure for 5 seconds
+ppk2 measure --duration 5         # Measure for 5 seconds at 100ksps
 ppk2 measure --duration 10 --save out.ppk2
-ppk2 measure --duration 5 --json  # JSON summary only (no live output)
+ppk2 measure --duration 5 --json  # JSON summary only
+ppk2 measure --rate 1000          # Downsample to 1ksps
+ppk2 measure --rate 100 --duration 300 --save slow.ppk2
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-d, --duration` | Seconds to measure (omitted = run until Ctrl+C) |
+| `--save` | Save to .ppk2 file |
+| `-r, --rate` | Downsample to N samples/sec (default: 100000). Rates not dividing 100000 evenly are rounded to nearest divisor |
 
 Live status line updates in-place every 500ms on stderr:
 ```
-2.5s  avg 41.9mA  138.4mW
+2.5s  avg 41.9uA  138.4uW
 ```
 
 Text summary (stdout):
@@ -82,12 +88,8 @@ JSON summary:
 - `avg_ua`: Mean current in microamps over measurement window
 - `charge_uah`: Total charge consumed in microamp-hours (avg × duration / 3600)
 - `power_uw`: Power in microwatts (voltage × avg current / 1000), only shown in source mode
-- `samples`: Total sample count (100ksps = 100,000 samples/sec)
+- `samples`: Total sample count (at chosen rate, not raw 100ksps)
 - `min_ua` / `max_ua`: Min/max current observed
-
-### Saved path
-Autosave file is always written to disk (asynchronous, non-blocking). Path printed after summary.
-With `--save`, the file is copied to the requested path and the autosave is removed.
 
 ### Auto-power behavior
 Controlled by config (`~/.config/ppk2/config.toml`):
@@ -102,19 +104,19 @@ Current limit warnings: >400mA in source mode warns to connect both USB ports; >
 
 ## Trigger (analog threshold)
 
-Capture a burst/spike with pre/post-trigger buffering.
+Capture a burst/spike with pre/post-trigger buffering at full 100ksps.
 
 ```
-ppk2 trigger --threshold 5000 --edge rising                              # Fire when current exceeds 5mA
-ppk2 trigger --threshold 1000 --edge falling --pre-trigger 200 --post-trigger 500  # Capture on 1mA fall
-ppk2 trigger --threshold 100 --edge both --save spike.ppk2               # Capture any edge crossing 100uA
+ppk2 trigger --threshold 5000 --edge rising
+ppk2 trigger --threshold 1000 --edge falling --pre-trigger 200 --post-trigger 500
+ppk2 trigger --threshold 100 --edge both --save spike.ppk2
 ```
 
 Parameters:
 - `-t, --threshold`: Current threshold in uA
 - `-e, --edge`: `rising`, `falling`, or `both` (default: `rising`)
-- `--pre-trigger`: Samples (ms) before trigger point (default: 100)
-- `--post-trigger`: Samples (ms) after trigger point (default: 1000)
+- `--pre-trigger`: Milliseconds before trigger point (default: 100)
+- `--post-trigger`: Milliseconds after trigger point (default: 1000)
 - `--save`: Save captured data to .ppk2 file
 
 Output:
@@ -124,23 +126,24 @@ trigger fired at 10000 samples  captured 110000 samples  duration 2.1s  avg 5003
 
 ## Daemon
 
-Long-running background measurement with realtime IPC via Unix socket.
+Long-running background measurement. Uses `Command::spawn` (no fork) — parent exits immediately, child binds socket and measures in background.
 
 ```
-ppk2 daemon start                   # background, prints socket path + PID
-ppk2 daemon status                  # realtime stats as JSON
-ppk2 daemon stop                    # stop and finalize autosave
-ppk2 daemon stop --save out.ppk2    # stop with named .ppk2 file
+ppk2 daemon start                   # Background, prints socket path + PID
+ppk2 daemon status                  # Realtime stats as JSON
+ppk2 daemon stop                    # Stop and finalize autosave
+ppk2 daemon stop --save out.ppk2    # Stop with named .ppk2 file
+ppk2 daemon start --rate 100        # Background daemon at 100sps
 ```
 
-Socket at `~/.local/state/ppk2/<serial>/daemon.sock`.
+Socket at `~/.local/state/ppk2/<serial>/daemon.sock`. Pidfile at `daemon.pid`. Stderr logged to `daemon.log`.
 
 Status response:
 ```json
 {"elapsed_s":2.5,"samples":228863,"avg_ua":41337.8,"min_ua":-1.4,"max_ua":62631.1}
 ```
 
-On stop, the daemon prints measurement summary and saved path. Autosave runs in background during measurement (non-blocking periodic flush).
+On stop, daemon prints measurement summary to the log file. Autosave writes to disk in paged buffers during measurement (bounded memory, no RAM accumulation).
 
 ## Firmware
 
@@ -148,7 +151,11 @@ On stop, the daemon prints measurement summary and saved path. Autosave runs in 
 ppk2 firmware info
 ```
 
-Reads firmware version from device metadata. Example: `firmware: 2161`.
+Outputs firmware version and calibration status:
+```
+firmware: PCA63100 v1.2.4-db16a94 (calibrated)
+firmware: 2161 (uncalibrated)
+```
 
 ## File operations
 
@@ -179,11 +186,10 @@ Optional file at `~/.config/ppk2/config.toml`. Defaults used if absent.
 
 ```
 ppk2 config show        # Print current effective config
-ppk2 config show --json # Machine-readable
 ppk2 config init        # Create config file with defaults
 ```
 
-```
+```toml
 [defaults]
 mode = "source"
 voltage_mv = 3300
@@ -200,13 +206,12 @@ Env var overrides: `PPK2_VOLTAGE`, `PPK2_MODE`, `PPK2_AUTOSAVE_DIR`, `PPK2_PORT`
 
 ## Autosave & recovery
 
-Autosave writes .ppk2 files periodically during measurement (configurable interval, default 30s).
-Background writes via `Arc` + thread — never blocks the measurement loop.
+Autosave writes session data to a temp raw file in paged buffers (10k frames each, ~60KB pages). Memory bounded regardless of session length. On exit, .ppk2 ZIP archive is created from the raw file.
 
 ```
 ppk2 recover                          # List orphaned autosaves for all devices
 ppk2 recover --serial F057566F0FD6    # List for specific device
-ppk2 recover --json                   # JSON count
+ppk2 recover --json                   # JSON output
 ```
 
 Lost data after crash or disconnect can be recovered from autosave directory.
@@ -216,7 +221,7 @@ Lost data after crash or disconnect can be recovered from autosave directory.
 | Code | Exit | Meaning |
 |------|------|---------|
 | USER_ERROR | 1 | Device not found, bad args, power not on |
-| DEVICE_ERROR | 2 | Device busy, disconnected, timeout, firmware mismatch |
+| DEVICE_ERROR | 2 | Device disconnected, timeout |
 | INTERNAL_ERROR | 3 | Unexpected internal errors |
 
 ## Common workflows
@@ -226,7 +231,7 @@ Lost data after crash or disconnect can be recovered from autosave directory.
 ppk2 mode source
 ppk2 voltage 3000
 ppk2 power on
-ppk2 measure --duration 30 --save sleep.ppk2
+ppk2 measure --rate 100 --duration 300 --save sleep.ppk2
 ppk2 info sleep.ppk2
 ```
 
@@ -236,19 +241,14 @@ ppk2 mode source
 ppk2 voltage 3300
 ppk2 power on
 ppk2 trigger --threshold 15000 --edge rising --pre-trigger 50 --post-trigger 200 --save tx_spike.ppk2
-ppk2 info tx_spike.ppk2
-```
-
-### Export for analysis
-```bash
 ppk2 convert tx_spike.ppk2 --output tx_spike.csv
-# Import into Excel, Python pandas, or nRF Connect Power Profiler
 ```
 
-### Long-term logging with daemon
+### Long-term background logging
 ```bash
-ppk2 daemon start
+ppk2 daemon start --rate 10
 # ... hours/days pass ...
+ppk2 daemon status
 ppk2 daemon stop --save long_run.ppk2
 ppk2 info long_run.ppk2
 ```
