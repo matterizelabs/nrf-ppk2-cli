@@ -60,6 +60,13 @@ pub fn run(
         None
     };
 
+    let mut downsampler = rate.map(crate::downsample::Downsampler::new);
+    let sample_rate = downsampler
+        .as_ref()
+        .map(|d| d.actual_rate())
+        .unwrap_or(100_000);
+    let _ = sample_rate; // used in Task 5
+
     let mut count: u64 = 0;
     let mut sum: f64 = 0.0;
     let mut min: f64 = f64::MAX;
@@ -91,17 +98,32 @@ pub fn run(
                             continue;
                         }
                     };
-                    count += 1;
-                    sum += ua;
-                    if ua < min {
-                        min = ua;
-                    }
-                    if ua > max {
-                        max = ua;
-                    }
-
-                    if let Some(ref mut asv) = autosave {
-                        asv.push((ua as f32, sample.logic))?;
+                    if let Some(ref mut ds) = downsampler {
+                        if let Some((avg_ua, bits)) = ds.feed(ua, sample.logic) {
+                            count += 1;
+                            sum += avg_ua;
+                            if avg_ua < min {
+                                min = avg_ua;
+                            }
+                            if avg_ua > max {
+                                max = avg_ua;
+                            }
+                            if let Some(ref mut asv) = autosave {
+                                asv.push((avg_ua as f32, bits))?;
+                            }
+                        }
+                    } else {
+                        count += 1;
+                        sum += ua;
+                        if ua < min {
+                            min = ua;
+                        }
+                        if ua > max {
+                            max = ua;
+                        }
+                        if let Some(ref mut asv) = autosave {
+                            asv.push((ua as f32, sample.logic))?;
+                        }
                     }
                 }
             }
@@ -136,6 +158,22 @@ pub fn run(
             eprint!("\x1b[2K\r{}", line);
             let _ = std::io::stderr().flush();
             last_report = Instant::now();
+        }
+    }
+
+    if let Some(ref ds) = downsampler {
+        if let Some((avg_ua, bits)) = ds.flush() {
+            count += 1;
+            sum += avg_ua;
+            if avg_ua < min {
+                min = avg_ua;
+            }
+            if avg_ua > max {
+                max = avg_ua;
+            }
+            if let Some(ref mut asv) = autosave {
+                asv.push((avg_ua as f32, bits))?;
+            }
         }
     }
 
