@@ -111,6 +111,14 @@ enum Commands {
     #[command(name = "trigger-ext")]
     TriggerExt,
     Reset,
+    #[command(subcommand)]
+    Config(ConfigCmd),
+}
+
+#[derive(Subcommand)]
+enum ConfigCmd {
+    Init,
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -351,5 +359,9 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Reset => {
             commands::reset::run(cli.json, cli.port.as_deref(), cli.serial.as_deref())
         }
+        Commands::Config(cmd) => match cmd {
+            ConfigCmd::Init => commands::config_cmd::run_init(cli.json),
+            ConfigCmd::Show => commands::config_cmd::run_show(cli.json),
+        },
     }
 }

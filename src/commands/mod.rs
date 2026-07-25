@@ -1,5 +1,6 @@
 pub mod avg_num;
 pub mod cal_set;
+pub mod config_cmd;
 pub mod daemon_cmd;
 pub mod firmware_cmd;
 pub mod fw_trigger;

@@ -46,6 +46,10 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn config_path() -> PathBuf {
+        config_path()
+    }
+
     pub fn load() -> Result<Self> {
         let config_path = config_path();
 

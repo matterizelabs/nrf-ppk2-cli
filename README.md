@@ -140,16 +140,7 @@ ppk2 firmware info
 
 Reads firmware version from device metadata.
 
-### Autosave & recovery
-
-Config (`~/.config/ppk2/config.toml`):
-
-```
-[autosave]
-enabled = true
-interval_s = 30
-dir = "/path/to/autosaves"
-```
+### Recover
 
 Recover orphaned autosaves after crash or disconnect:
 
@@ -160,6 +151,8 @@ ppk2 recover --json
 ```
 
 ## Config
+
+Optional. Run `ppk2 config init` to create `~/.config/ppk2/config.toml`. Defaults are used if no file exists. View with `ppk2 config show`.
 
 ```
 [defaults]
