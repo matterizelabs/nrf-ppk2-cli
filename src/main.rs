@@ -50,26 +50,26 @@ enum Commands {
         mv: u16,
     },
     Measure {
-        #[arg(short = 'd', long)]
+        #[arg(short = 'd', long, help = "Seconds to measure (omitted = run until Ctrl+C)")]
         duration: Option<f64>,
-        #[arg(long)]
+        #[arg(long, help = "Save to .ppk2 file")]
         save: Option<String>,
-        #[arg(short = 'r', long)]
+        #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
         rate: Option<u32>,
     },
     Info {
         file: String,
     },
     Trigger {
-        #[arg(short = 't', long)]
+        #[arg(short = 't', long, help = "Current threshold in uA")]
         threshold: f64,
-        #[arg(short = 'e', long, default_value = "rising")]
+        #[arg(short = 'e', long, default_value = "rising", help = "rising, falling, or both")]
         edge: String,
-        #[arg(long, default_value = "100")]
+        #[arg(long, default_value = "100", help = "Milliseconds before trigger to capture")]
         pre_trigger: u64,
-        #[arg(long, default_value = "1000")]
+        #[arg(long, default_value = "1000", help = "Milliseconds after trigger to capture")]
         post_trigger: u64,
-        #[arg(long)]
+        #[arg(long, help = "Save captured window to .ppk2 file")]
         save: Option<String>,
     },
     Report {
@@ -132,11 +132,11 @@ enum FirmwareCmd {
 #[derive(Subcommand)]
 enum DaemonCmd {
     Start {
-        #[arg(short = 'r', long)]
+        #[arg(short = 'r', long, help = "Downsample to N samples/sec (default: 100000)")]
         rate: Option<u32>,
     },
     Stop {
-        #[arg(long)]
+        #[arg(long, help = "Save daemon session to .ppk2 file")]
         save: Option<String>,
     },
     Status,
