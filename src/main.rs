@@ -54,6 +54,8 @@ enum Commands {
         duration: Option<f64>,
         #[arg(long)]
         save: Option<String>,
+        #[arg(short = 'r', long)]
+        rate: Option<u32>,
     },
     Info {
         file: String,
@@ -129,7 +131,10 @@ enum FirmwareCmd {
 
 #[derive(Subcommand)]
 enum DaemonCmd {
-    Start,
+    Start {
+        #[arg(short = 'r', long)]
+        rate: Option<u32>,
+    },
     Stop {
         #[arg(long)]
         save: Option<String>,
@@ -217,10 +222,11 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Voltage { mv } => {
             commands::voltage::run(cli.json, mv, cli.port.as_deref(), cli.serial.as_deref())
         }
-        Commands::Measure { duration, save } => commands::measure::run(
+        Commands::Measure { duration, save, rate } => commands::measure::run(
             cli.json,
             duration,
             save.as_deref(),
+            rate,
             cli.port.as_deref(),
             cli.serial.as_deref(),
         ),
@@ -250,10 +256,11 @@ fn run(cli: Cli) -> Result<()> {
             ),
         },
         Commands::Daemon(cmd) => match cmd {
-            DaemonCmd::Start => commands::daemon_cmd::run_start(
+            DaemonCmd::Start { rate } => commands::daemon_cmd::run_start(
                 cli.json,
                 cli.port.as_deref(),
                 cli.serial.as_deref(),
+                rate,
             ),
             DaemonCmd::Stop { save } => {
                 commands::daemon_cmd::run_stop(cli.json, save.as_deref(), cli.serial.as_deref())

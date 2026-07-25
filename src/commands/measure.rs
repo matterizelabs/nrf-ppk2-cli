@@ -14,6 +14,7 @@ pub fn run(
     json: bool,
     duration: Option<f64>,
     save: Option<&str>,
+    rate: Option<u32>,
     port: Option<&str>,
     serial: Option<&str>,
 ) -> Result<()> {
