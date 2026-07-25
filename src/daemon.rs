@@ -46,6 +46,9 @@ mod unix {
         let _ = std::fs::remove_file(&sock_path);
         let listener = UnixListener::bind(&sock_path)?;
 
+        let pid_path = sock_path.parent().unwrap().join("daemon.pid");
+        std::fs::write(&pid_path, std::process::id().to_string())?;
+
         let state = Arc::new(SharedState {
             running: AtomicBool::new(true),
             stats: Mutex::new(DaemonStats {
@@ -105,6 +108,7 @@ mod unix {
         }
         let _ = handle.join();
         let _ = std::fs::remove_file(&sock_path);
+        let _ = std::fs::remove_file(&pid_path);
         Ok(())
     }
 

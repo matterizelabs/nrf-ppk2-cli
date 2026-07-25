@@ -37,6 +37,10 @@ pub fn run_start(
     }
 
     let exe = std::env::current_exe()?;
+    let log_path = crate::config::Config::state_dir()
+        .join(&sn)
+        .join("daemon.log");
+    let log = std::fs::File::create(&log_path)?;
     let mut cmd = Command::new(exe);
     cmd.arg("daemon")
         .arg("start")
@@ -47,7 +51,7 @@ pub fn run_start(
         .env("PPK2_DAEMONIZED", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(log);
 
     if let Some(r) = rate {
         cmd.arg("--rate").arg(r.to_string());
