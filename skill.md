@@ -1,6 +1,6 @@
 ---
 name: ppk2-cli
-description: Use for controlling Nordic Power Profiler Kit II via the ppk2 CLI. Covers device setup, measurement (avg/charge/power, JSON output), analog trigger, daemon mode, firmware operations, file info/report/convert, autosave recovery, and common workflows.
+description: Use for controlling Nordic Power Profiler Kit II via the ppk2 CLI. Covers device setup, measurement (live status, JSON output), analog trigger, daemon mode with IPC, firmware info, file operations (info/report/convert), autosave recovery, config management, and common workflows.
 ---
 
 # ppk2 CLI
@@ -26,7 +26,11 @@ If `--serial` is given, ppk2 auto-discovers the port. If neither flag given, use
 ppk2 list
 ppk2 list --json
 ```
-Returns serial/port pairs of all attached PPK2 devices.
+Returns serial with control and data ports. Output:
+```
+F057566F0FD6  control=/dev/ttyACM0  data=/dev/ttyACM1
+```
+JSON: `[{"serial":"F057566F0FD6","control":"/dev/ttyACM0","data":"/dev/ttyACM1"}]`
 
 ### Set measurement mode
 ```
@@ -52,18 +56,24 @@ ppk2 power off      # Disable DUT power output
 
 ### Basic measurement
 ```
-ppk2 measure --duration 5              # Measure for 5 seconds
-ppk2 measure --duration 5 --save out.ppk2  # Measure and save
-ppk2 measure                           # Measure until Ctrl+C
-ppk2 measure --duration 5 --json       # JSON output
+ppk2 measure                      # Run until Ctrl+C (live stats on stderr)
+ppk2 measure --duration 5         # Measure for 5 seconds
+ppk2 measure --duration 10 --save out.ppk2
+ppk2 measure --duration 5 --json  # JSON summary only (no live output)
 ```
 
-Output (text):
+Live status line updates in-place every 500ms on stderr:
+```
+2.5s  avg 41.9mA  138.4mW
+```
+
+Text summary (stdout):
 ```
 duration 5.0s  samples 500000  avg 42.3uA  charge 0.059uAh  power 140uW
+saved /home/amac/.local/share/ppk2/autosave/F057566F0FD6/ppk2-1784911444.ppk2
 ```
 
-Output (JSON):
+JSON summary:
 ```json
 {"duration_s":5.0,"samples":500000,"avg_ua":42.300,"charge_uah":0.058750,"power_uw":139.6,"min_ua":1.200,"max_ua":15000.000}
 ```
@@ -75,12 +85,16 @@ Output (JSON):
 - `samples`: Total sample count (100ksps = 100,000 samples/sec)
 - `min_ua` / `max_ua`: Min/max current observed
 
+### Saved path
+Autosave file is always written to disk (asynchronous, non-blocking). Path printed after summary.
+With `--save`, the file is copied to the requested path and the autosave is removed.
+
 ### Auto-power behavior
 Controlled by config (`~/.config/ppk2/config.toml`):
 ```
 [behavior]
 auto_power = "session"  # on during measure, off after (default)
-# auto_power = "never"  # never touch power
+# auto_power = "never"  # manual power control
 # auto_power = "always" # keep power on
 ```
 
@@ -110,23 +124,31 @@ trigger fired at 10000 samples  captured 110000 samples  duration 2.1s  avg 5003
 
 ## Daemon
 
-Long-running background measurement via IPC socket.
+Long-running background measurement with realtime IPC via Unix socket.
 
 ```
-ppk2 daemon start              # Start daemon for current device
-ppk2 daemon status             # Check if daemon is running
-ppk2 daemon stop               # Stop daemon
-ppk2 daemon stop --save out.ppk2  # Stop and save captured data
+ppk2 daemon start                   # background, prints socket path + PID
+ppk2 daemon status                  # realtime stats as JSON
+ppk2 daemon stop                    # stop and finalize autosave
+ppk2 daemon stop --save out.ppk2    # stop with named .ppk2 file
 ```
 
-Daemon communicates via Unix socket at `~/.local/share/ppk2/daemon/<serial>.sock`.
+Socket at `~/.local/state/ppk2/<serial>/daemon.sock`.
+
+Status response:
+```json
+{"elapsed_s":2.5,"samples":228863,"avg_ua":41337.8,"min_ua":-1.4,"max_ua":62631.1}
+```
+
+On stop, the daemon prints measurement summary and saved path. Autosave runs in background during measurement (non-blocking periodic flush).
 
 ## Firmware
 
 ```
-ppk2 firmware info    # Read firmware version from device
-ppk2 firmware upgrade # Reflash PPK2 firmware
+ppk2 firmware info
 ```
+
+Reads firmware version from device metadata. Example: `firmware: 2161`.
 
 ## File operations
 
@@ -142,7 +164,7 @@ Reads a .ppk2 file and prints summary (duration, samples, avg current, charge).
 ppk2 report capture1.ppk2 capture2.ppk2
 ppk2 report *.ppk2 --json
 ```
-Summary for one or more .ppk2 files.
+Summary for one or more .ppk2 files (line-delimited JSON).
 
 ### Convert to CSV
 ```
@@ -151,23 +173,42 @@ ppk2 convert capture.ppk2 --output /tmp/out.csv
 ```
 Output columns: `timestamp_us,current_ua,D0,D1,D2,D3,D4,D5,D6,D7`.
 
-## Error recovery
+## Config
 
-### Autosave
-Enabling autosave in config writes .ppk2 files periodically during measurement:
+Optional file at `~/.config/ppk2/config.toml`. Defaults used if absent.
+
 ```
+ppk2 config show        # Print current effective config
+ppk2 config show --json # Machine-readable
+ppk2 config init        # Create config file with defaults
+```
+
+```
+[defaults]
+mode = "source"
+voltage_mv = 3300
+
+[behavior]
+auto_power = "session"
+
 [autosave]
 enabled = true
-interval_s = 5
-dir = "/path/to/autosaves"
+interval_s = 30
 ```
 
-### Recover orphaned files
+Env var overrides: `PPK2_VOLTAGE`, `PPK2_MODE`, `PPK2_AUTOSAVE_DIR`, `PPK2_PORT`.
+
+## Autosave & recovery
+
+Autosave writes .ppk2 files periodically during measurement (configurable interval, default 30s).
+Background writes via `Arc` + thread — never blocks the measurement loop.
+
 ```
 ppk2 recover                          # List orphaned autosaves for all devices
-ppk2 recover --serial F057566F0FD6   # List for specific device
-ppk2 recover --json                  # JSON count
+ppk2 recover --serial F057566F0FD6    # List for specific device
+ppk2 recover --json                   # JSON count
 ```
+
 Lost data after crash or disconnect can be recovered from autosave directory.
 
 ## Error codes
@@ -206,8 +247,8 @@ ppk2 convert tx_spike.ppk2 --output tx_spike.csv
 
 ### Long-term logging with daemon
 ```bash
-ppk2 daemon start --serial F057566F0FD6
-# ... wait hours/days ...
+ppk2 daemon start
+# ... hours/days pass ...
 ppk2 daemon stop --save long_run.ppk2
 ppk2 info long_run.ppk2
 ```
