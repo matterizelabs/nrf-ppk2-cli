@@ -9,6 +9,7 @@ pub fn write_ppk2(
     frames: &[(f32, u8)],
     minimap_json: &str,
     start_time_ms: u64,
+    samples_per_second: u32,
 ) -> Result<()> {
     let file = std::fs::File::create(path)?;
     let mut zip = zip::ZipWriter::new(file);
@@ -33,8 +34,8 @@ pub fn write_ppk2(
     }
 
     let metadata = format!(
-        r#"{{"metadata":{{"samplesPerSecond":100000,"startSystemTime":{}}},"formatVersion":2}}"#,
-        start_time_ms,
+        r#"{{"metadata":{{"samplesPerSecond":{},"startSystemTime":{}}},"formatVersion":2}}"#,
+        samples_per_second, start_time_ms,
     );
     zip.start_file("metadata.json", options)?;
     zip.write_all(metadata.as_bytes())?;
@@ -51,6 +52,7 @@ pub fn write_ppk2_from_raw(
     raw_path: &str,
     minimap_json: &str,
     start_time_ms: u64,
+    samples_per_second: u32,
 ) -> Result<()> {
     let output = std::fs::File::create(path)?;
     let mut zip = zip::ZipWriter::new(output);
@@ -69,8 +71,8 @@ pub fn write_ppk2_from_raw(
     }
 
     let metadata = format!(
-        r#"{{"metadata":{{"samplesPerSecond":100000,"startSystemTime":{}}},"formatVersion":2}}"#,
-        start_time_ms,
+        r#"{{"metadata":{{"samplesPerSecond":{},"startSystemTime":{}}},"formatVersion":2}}"#,
+        samples_per_second, start_time_ms,
     );
     zip.start_file("metadata.json", options)?;
     zip.write_all(metadata.as_bytes())?;
@@ -82,7 +84,7 @@ pub fn write_ppk2_from_raw(
     Ok(())
 }
 
-pub fn read_ppk2(path: &str) -> Result<Vec<(f32, u8)>> {
+pub fn read_ppk2(path: &str) -> Result<(Vec<(f32, u8)>, u32)> {
     let file = std::fs::File::open(path)?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| crate::error::Error::InvalidArg(format!("bad .ppk2 file: {}", e)))?;
@@ -108,11 +110,27 @@ pub fn read_ppk2(path: &str) -> Result<Vec<(f32, u8)>> {
         }
     }
 
-    Ok(frames)
+    let mut samples_per_second: u32 = 100_000;
+    if let Ok(mut meta_file) = archive.by_name("metadata.json") {
+        let mut meta_buf = Vec::new();
+        std::io::Read::read_to_end(&mut meta_file, &mut meta_buf)?;
+        if let Ok(meta_str) = std::str::from_utf8(&meta_buf) {
+            if let Some(pos) = meta_str.find("samplesPerSecond") {
+                let rest = &meta_str[pos + 17..];
+                if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
+                    if let Ok(val) = rest[..end].parse::<u32>() {
+                        samples_per_second = val;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((frames, samples_per_second))
 }
 
 pub fn export_csv(ppk2_path: &str, csv_path: &str) -> Result<()> {
-    let frames = read_ppk2(ppk2_path)?;
+    let (frames, _) = read_ppk2(ppk2_path)?;
     let file = std::fs::File::create(csv_path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(b"timestamp_us,current_ua,D0,D1,D2,D3,D4,D5,D6,D7\n")?;
@@ -147,8 +165,9 @@ mod tests {
     fn roundtrip_ppk2() {
         let frames = vec![(42.0f32, 0x03u8), (100.0f32, 0xFFu8), (0.0f32, 0x00u8)];
         let path = "/tmp/test_roundtrip.ppk2";
-        write_ppk2(path, &frames, "{}", 1720000000000).unwrap();
-        let read = read_ppk2(path).unwrap();
+        write_ppk2(path, &frames, "{}", 1720000000000, 100_000).unwrap();
+        let (read, rate) = read_ppk2(path).unwrap();
+        assert_eq!(rate, 100_000);
         assert_eq!(read.len(), 3);
         assert!((read[0].0 - 42.0).abs() < 1.0);
         assert_eq!(read[1].1, 0xFF);

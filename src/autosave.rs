@@ -213,6 +213,7 @@ impl Autosave {
                 &self.raw_path.to_string_lossy(),
                 &minimap_json,
                 self.start_time_ms,
+                100_000,
             )?;
             if std::fs::rename(tmp_str, sp).is_err() {
                 std::fs::copy(tmp_str, sp)?;
@@ -229,6 +230,7 @@ impl Autosave {
                 &self.raw_path.to_string_lossy(),
                 &minimap_json,
                 self.start_time_ms,
+                100_000,
             )?;
             std::fs::rename(tmp_str, &self.path)?;
             let _ = std::fs::remove_file(&self.raw_path);

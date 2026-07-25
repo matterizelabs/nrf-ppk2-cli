@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::fileio;
 
 pub fn run(json: bool, file: &str) -> Result<()> {
-    let frames = fileio::read_ppk2(file)?;
+    let (frames, rate) = fileio::read_ppk2(file)?;
 
     let count = frames.len() as u64;
     let sum: f64 = frames.iter().map(|(ua, _)| *ua as f64).sum();
@@ -12,7 +12,7 @@ pub fn run(json: bool, file: &str) -> Result<()> {
         .fold((f32::MAX, f32::MIN), |(min, max), (ua, _)| {
             (min.min(*ua), max.max(*ua))
         });
-    let duration = count as f64 / 100_000.0;
+    let duration = count as f64 / rate as f64;
     let charge = avg * duration / 3600.0;
 
     if json {

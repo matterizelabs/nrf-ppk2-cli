@@ -3,11 +3,11 @@ use crate::fileio;
 
 pub fn run(json: bool, files: &[String]) -> Result<()> {
     for file in files {
-        let frames = fileio::read_ppk2(file)?;
+        let (frames, rate) = fileio::read_ppk2(file)?;
         let count = frames.len() as u64;
         let sum: f64 = frames.iter().map(|(ua, _)| *ua as f64).sum();
         let avg = if count > 0 { sum / count as f64 } else { 0.0 };
-        let duration = count as f64 / 100_000.0;
+        let duration = count as f64 / rate as f64;
         let charge = avg * duration / 3600.0;
 
         if json {
