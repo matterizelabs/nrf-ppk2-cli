@@ -11,6 +11,7 @@ mod unix {
     use crate::config::Config;
     use crate::device::Ppk2Device;
     use crate::error::Result;
+    use nix::unistd::fork;
     use serde::Deserialize;
 
     struct SharedState {
@@ -47,6 +48,13 @@ mod unix {
         let listener = UnixListener::bind(&sock_path)?;
         println!("{}", sock_path.display());
         println!("{}", std::process::id());
+
+        match unsafe { fork() }.map_err(|e| crate::error::Error::Other(e.to_string()))? {
+            nix::unistd::ForkResult::Child => {}
+            nix::unistd::ForkResult::Parent { .. } => {
+                std::process::exit(0);
+            }
+        }
 
         let state = Arc::new(SharedState {
             running: AtomicBool::new(true),

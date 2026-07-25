@@ -401,6 +401,7 @@ version = "0.1.4"
 dependencies = [
  "clap",
  "ctrlc",
+ "nix 0.31.3",
  "serde",
  "serde_json",
  "serialport",
