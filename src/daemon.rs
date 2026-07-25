@@ -167,7 +167,12 @@ mod unix {
         }
     }
 
-    fn measure_loop(port_path: &str, serial: &str, state: &SharedState, rate: Option<u32>) -> Result<()> {
+    fn measure_loop(
+        port_path: &str,
+        serial: &str,
+        state: &SharedState,
+        rate: Option<u32>,
+    ) -> Result<()> {
         let config = Config::load()?;
         let mut device = Ppk2Device::open(port_path)?;
 

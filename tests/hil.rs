@@ -177,6 +177,40 @@ fn measure_save_and_verify() {
 }
 
 #[test]
+fn measure_downsampled() {
+    let tmp = "/tmp/ppk2_test_ds.ppk2";
+    let _ = std::fs::remove_file(tmp);
+
+    let _guard = require_device();
+    let sn = device_serial();
+    ppk2_ok(&["--serial", &sn, "mode", "source"]);
+    ppk2_ok(&["--serial", &sn, "voltage", "3300"]);
+    ppk2_ok(&["--serial", &sn, "power", "on"]);
+
+    ppk2_ok(&[
+        "--serial",
+        &sn,
+        "measure",
+        "--duration",
+        "1",
+        "--save",
+        tmp,
+        "--rate",
+        "10000",
+    ]);
+
+    let out = ppk2_ok(&["info", tmp]);
+    let text = stdout(&out);
+    assert!(text.contains("duration"), "info missing duration: {}", text);
+
+    let out = ppk2_ok(&["report", tmp]);
+    let text = stdout(&out);
+    assert!(text.contains("samples"), "report missing samples: {}", text);
+
+    let _ = std::fs::remove_file(tmp);
+}
+
+#[test]
 fn info_on_saved_file() {
     let tmp = "/tmp/ppk2_test_info.ppk2";
     let _ = std::fs::remove_file(tmp);

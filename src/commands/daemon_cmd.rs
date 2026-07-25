@@ -16,7 +16,12 @@ fn escape_json(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-pub fn run_start(json: bool, port: Option<&str>, serial: Option<&str>, rate: Option<u32>) -> Result<()> {
+pub fn run_start(
+    json: bool,
+    port: Option<&str>,
+    serial: Option<&str>,
+    rate: Option<u32>,
+) -> Result<()> {
     let (port_path, _) = resolve_port(port, serial)?;
     let sn = resolve_daemon_serial(serial);
     if json {
