@@ -4,6 +4,7 @@ mod config;
 mod conversion;
 mod daemon;
 mod device;
+mod downsample;
 mod error;
 mod fileio;
 mod firmware;
