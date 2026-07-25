@@ -1,48 +1,83 @@
+use serde::{Deserialize, Serialize};
+
 use crate::error::Result;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
+    #[serde(default)]
     pub defaults: DefaultsConfig,
+    #[serde(default)]
     pub behavior: BehaviorConfig,
+    #[serde(default)]
     pub autosave: AutosaveConfig,
+    #[serde(skip)]
     pub port: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultsConfig {
+    #[serde(default = "default_mode")]
     pub mode: String,
+    #[serde(default = "default_voltage")]
     pub voltage_mv: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BehaviorConfig {
+    #[serde(default = "default_auto_power")]
     pub auto_power: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutosaveConfig {
+    #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default = "default_interval")]
     pub interval_s: u64,
+    #[serde(default)]
     pub dir: Option<String>,
 }
 
-impl Default for Config {
+fn default_mode() -> String {
+    "source".into()
+}
+fn default_voltage() -> u16 {
+    3300
+}
+fn default_auto_power() -> String {
+    "session".into()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_interval() -> u64 {
+    30
+}
+
+impl Default for DefaultsConfig {
     fn default() -> Self {
         Self {
-            defaults: DefaultsConfig {
-                mode: "source".into(),
-                voltage_mv: 3300,
-            },
-            behavior: BehaviorConfig {
-                auto_power: "session".into(),
-            },
-            autosave: AutosaveConfig {
-                enabled: true,
-                interval_s: 30,
-                dir: None,
-            },
-            port: None,
+            mode: default_mode(),
+            voltage_mv: default_voltage(),
+        }
+    }
+}
+
+impl Default for BehaviorConfig {
+    fn default() -> Self {
+        Self {
+            auto_power: default_auto_power(),
+        }
+    }
+}
+
+impl Default for AutosaveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            interval_s: default_interval(),
+            dir: None,
         }
     }
 }
@@ -55,12 +90,12 @@ impl Config {
     pub fn load() -> Result<Self> {
         let config_path = config_path();
 
-        let mut config = Config::default();
-        if config_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_path) {
-                config = parse_config(&content);
-            }
-        }
+        let mut config = if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)?;
+            toml::from_str(&content).unwrap_or_default()
+        } else {
+            Config::default()
+        };
 
         if let Ok(v) = std::env::var("PPK2_VOLTAGE") {
             config.defaults.voltage_mv = v.parse().unwrap_or(config.defaults.voltage_mv);
@@ -191,82 +226,6 @@ fn home_dir() -> PathBuf {
     }
 }
 
-fn toml_value(value: &str) -> String {
-    let v = value.trim();
-    if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
-        v[1..v.len() - 1].to_string()
-    } else {
-        v.to_string()
-    }
-}
-
-fn toml_bool(value: &str) -> bool {
-    let v = value.trim();
-    v == "true" || v == "\"true\""
-}
-
-fn toml_u64(value: &str) -> u64 {
-    let v = value.trim().trim_matches('"');
-    v.parse().unwrap_or(0)
-}
-
-fn toml_u16(value: &str) -> u16 {
-    let v = value.trim().trim_matches('"');
-    v.parse().unwrap_or(0)
-}
-
-fn parse_config(content: &str) -> Config {
-    let mut config = Config::default();
-    let mut section = "";
-
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            section = &line[1..line.len() - 1];
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim();
-
-            match (section, key) {
-                ("defaults", "mode") => {
-                    let v = toml_value(value);
-                    if v == "source" || v == "ampere" {
-                        config.defaults.mode = v;
-                    } else {
-                        eprintln!("warning: invalid mode '{}', using default 'source'", v);
-                    }
-                }
-                ("defaults", "voltage_mv") => {
-                    config.defaults.voltage_mv = toml_u16(value);
-                }
-                ("behavior", "auto_power") => {
-                    let v = toml_value(value);
-                    if v == "never" || v == "session" || v == "always" {
-                        config.behavior.auto_power = v;
-                    } else {
-                        eprintln!(
-                            "warning: invalid auto_power '{}', using default 'session'",
-                            v
-                        );
-                    }
-                }
-                ("autosave", "enabled") => config.autosave.enabled = toml_bool(value),
-                ("autosave", "interval_s") => {
-                    config.autosave.interval_s = toml_u64(value);
-                }
-                ("autosave", "dir") => config.autosave.dir = Some(toml_value(value)),
-                _ => {}
-            }
-        }
-    }
-
-    config
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,7 +250,7 @@ voltage_mv = 5000
 [behavior]
 auto_power = "never"
 "#;
-        let c = parse_config(toml_str);
+        let c: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(c.defaults.mode, "ampere");
         assert_eq!(c.defaults.voltage_mv, 5000);
         assert_eq!(c.behavior.auto_power, "never");
@@ -304,18 +263,20 @@ auto_power = "never"
 enabled = true
 interval_s = 60
 "#;
-        let c = parse_config(toml_str);
+        let c: Config = toml::from_str(toml_str).unwrap();
         assert!(c.autosave.enabled);
         assert_eq!(c.autosave.interval_s, 60);
     }
 
     #[test]
-    fn parse_toml_quoted_boolean() {
+    fn parse_toml_missing_section_defaults() {
         let toml_str = r#"
-[autosave]
-enabled = "true"
+[defaults]
+mode = "ampere"
 "#;
-        let c = parse_config(toml_str);
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(c.defaults.mode, "ampere");
+        assert_eq!(c.defaults.voltage_mv, 3300);
         assert!(c.autosave.enabled);
     }
 
@@ -325,7 +286,7 @@ enabled = "true"
 [defaults]
 voltage_mv = 1800
 "#;
-        let c = parse_config(toml_str);
+        let c: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(c.defaults.voltage_mv, 1800);
     }
 }

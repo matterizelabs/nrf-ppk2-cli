@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,7 +71,7 @@ pub struct Metadata {
     pub calibrated: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MeasurementStats {
     pub duration_s: f64,
     pub samples: u64,
@@ -97,20 +98,7 @@ impl fmt::Display for MeasurementStats {
 
 impl MeasurementStats {
     pub fn to_json(&self) -> String {
-        let power = self
-            .power_uw
-            .map(|p| p.to_string())
-            .unwrap_or_else(|| "null".to_string());
-        format!(
-            r#"{{"duration_s":{},"samples":{},"avg_ua":{:.3},"charge_uah":{:.6},"power_uw":{},"min_ua":{:.3},"max_ua":{:.3}}}"#,
-            self.duration_s,
-            self.samples,
-            self.avg_ua,
-            self.charge_uah,
-            power,
-            self.min_ua,
-            self.max_ua,
-        )
+        serde_json::to_string(self).unwrap_or_else(|_| "{}".into())
     }
 }
 

@@ -11,6 +11,7 @@ mod unix {
     use crate::config::Config;
     use crate::device::Ppk2Device;
     use crate::error::Result;
+    use serde::Deserialize;
 
     struct SharedState {
         running: AtomicBool,
@@ -24,6 +25,13 @@ mod unix {
         min: f64,
         max: f64,
         start: Instant,
+    }
+
+    #[derive(Deserialize)]
+    struct DaemonCommand {
+        cmd: String,
+        #[serde(default)]
+        save: Option<String>,
     }
 
     pub fn socket_path(serial: &str) -> PathBuf {
@@ -102,35 +110,13 @@ mod unix {
         Ok(())
     }
 
-    fn extract_json_val<'a>(line: &'a str, key: &str) -> Option<&'a str> {
-        let pat = format!(r#""{}":"#, key);
-        let start = line.find(&pat)? + pat.len();
-        let rest = &line[start..];
-        if let Some(stripped) = rest.strip_prefix('"') {
-            let end = stripped.find('"')?;
-            Some(&stripped[..end])
-        } else {
-            let end = rest.find(',').unwrap_or(rest.len());
-            let end = rest[..end].find('}').unwrap_or(end);
-            let val = rest[..end].trim();
-            if val.is_empty() {
-                None
-            } else {
-                Some(val)
-            }
-        }
-    }
-
-    fn parse_json_cmd(line: &str) -> (&str, Option<&str>) {
-        let cmd = extract_json_val(line, "cmd").unwrap_or("");
-        let save = extract_json_val(line, "save");
-        (cmd, save)
-    }
-
     fn handle_command(line: &str, state: &SharedState) -> String {
-        let (cmd, save) = parse_json_cmd(line);
+        let cmd: DaemonCommand = match serde_json::from_str(line) {
+            Ok(c) => c,
+            Err(_) => return r#"{"error":"invalid command"}"#.to_string(),
+        };
 
-        match cmd {
+        match cmd.cmd.as_str() {
             "status" => {
                 let stats = state.stats.lock().unwrap();
                 let elapsed = stats.start.elapsed().as_secs_f64();
@@ -157,8 +143,8 @@ mod unix {
                 )
             }
             "stop" => {
-                if let Some(s) = save {
-                    *state.save_path.lock().unwrap() = Some(s.to_string());
+                if let Some(s) = &cmd.save {
+                    *state.save_path.lock().unwrap() = Some(s.clone());
                 }
                 state.running.store(false, Ordering::SeqCst);
                 r#"{"status":"stopping"}"#.to_string()

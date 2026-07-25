@@ -1,9 +1,12 @@
 use std::io::{BufWriter, Write};
 
+use serde::Deserialize;
+
+#[cfg(test)]
 use crate::conversion::convert_bits16;
 use crate::error::Result;
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn write_ppk2(
     path: &str,
     frames: &[(f32, u8)],
@@ -113,15 +116,21 @@ pub fn read_ppk2(path: &str) -> Result<(Vec<(f32, u8)>, u32)> {
     let mut samples_per_second: u32 = 100_000;
     if let Ok(mut meta_file) = archive.by_name("metadata.json") {
         let mut meta_buf = Vec::new();
-        std::io::Read::read_to_end(&mut meta_file, &mut meta_buf)?;
-        if let Ok(meta_str) = std::str::from_utf8(&meta_buf) {
-            if let Some(pos) = meta_str.find("samplesPerSecond") {
-                let rest = &meta_str[pos + 17..];
-                if let Some(end) = rest.find(|c: char| !c.is_ascii_digit()) {
-                    if let Ok(val) = rest[..end].parse::<u32>() {
-                        samples_per_second = val;
-                    }
-                }
+        if std::io::Read::read_to_end(&mut meta_file, &mut meta_buf).is_ok() {
+            #[derive(Deserialize)]
+            struct Meta {
+                metadata: MetaInner,
+            }
+            #[derive(Deserialize)]
+            struct MetaInner {
+                #[serde(default = "default_rate", rename = "samplesPerSecond")]
+                samples_per_second: u32,
+            }
+            fn default_rate() -> u32 {
+                100_000
+            }
+            if let Ok(meta) = serde_json::from_slice::<Meta>(&meta_buf) {
+                samples_per_second = meta.metadata.samples_per_second;
             }
         }
     }
