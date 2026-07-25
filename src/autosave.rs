@@ -206,35 +206,26 @@ impl Autosave {
 
         let minimap_json = self.minimap.to_json();
 
+        let tmp_path = self.raw_path.with_extension("ppk2.tmp");
+        let tmp_str = tmp_path.to_str().unwrap_or("autosave.tmp.ppk2");
+        fileio::write_ppk2_from_raw(
+            tmp_str,
+            &self.raw_path.to_string_lossy(),
+            &minimap_json,
+            self.start_time_ms,
+            self.samples_per_second,
+        )?;
+
         if let Some(sp) = save_path {
-            let dest = std::path::Path::new(sp);
-            let tmp = dest.with_extension("ppk2.tmp");
-            let tmp_str = tmp.to_str().unwrap_or("autosave.tmp.ppk2");
-            fileio::write_ppk2_from_raw(
-                tmp_str,
-                &self.raw_path.to_string_lossy(),
-                &minimap_json,
-                self.start_time_ms,
-                self.samples_per_second,
-            )?;
-            if std::fs::rename(tmp_str, sp).is_err() {
-                std::fs::copy(tmp_str, sp)?;
-                let _ = std::fs::remove_file(tmp_str);
+            if std::fs::rename(&tmp_path, sp).is_err() {
+                std::fs::copy(&tmp_path, sp)?;
+                let _ = std::fs::remove_file(&tmp_path);
             }
             let _ = std::fs::remove_file(&self.raw_path);
             let _ = std::fs::remove_file(&self.path);
             Ok(sp.to_string())
         } else {
-            let tmp_path = self.path.with_extension("ppk2.tmp");
-            let tmp_str = tmp_path.to_str().unwrap_or("autosave.tmp.ppk2");
-            fileio::write_ppk2_from_raw(
-                tmp_str,
-                &self.raw_path.to_string_lossy(),
-                &minimap_json,
-                self.start_time_ms,
-                self.samples_per_second,
-            )?;
-            std::fs::rename(tmp_str, &self.path)?;
+            std::fs::rename(&tmp_path, &self.path)?;
             let _ = std::fs::remove_file(&self.raw_path);
             Ok(self.path.to_string_lossy().to_string())
         }
