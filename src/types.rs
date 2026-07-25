@@ -67,7 +67,6 @@ pub struct Metadata {
     pub hardware: String,
     pub mode: u8,
     pub vdd_mv: u16,
-    #[allow(dead_code)]
     pub calibrated: bool,
 }
 

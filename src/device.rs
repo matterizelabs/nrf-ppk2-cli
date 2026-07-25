@@ -86,6 +86,10 @@ impl Ppk2Device {
         let converter = Converter::new(metadata.modifiers.clone(), metadata.vdd_mv);
         let source_vdd_mv = metadata.vdd_mv;
 
+        if !metadata.calibrated {
+            eprintln!("warning: device is not calibrated, measurements may be inaccurate");
+        }
+
         Ok(Self {
             port,
             metadata,
