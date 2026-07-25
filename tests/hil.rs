@@ -67,8 +67,8 @@ fn list_shows_device() {
         text
     );
     assert!(
-        text.contains("control=") && text.contains("data="),
-        "should show control and data ports: {}",
+        text.contains("/dev/"),
+        "should show device port: {}",
         text
     );
 }
@@ -79,12 +79,7 @@ fn list_json_has_serial_and_ports() {
     let out = ppk2_ok(&["list", "--json"]);
     let text = stdout(&out);
     assert!(text.contains("\"serial\""), "json missing serial: {}", text);
-    assert!(
-        text.contains("\"control\""),
-        "json missing control: {}",
-        text
-    );
-    assert!(text.contains("\"data\""), "json missing data: {}", text);
+    assert!(text.contains("\"port\""), "json missing port: {}", text);
 }
 
 #[test]

@@ -9,13 +9,8 @@ pub fn run(json: bool) -> Result<()> {
             .iter()
             .map(|d| {
                 format!(
-                    r#"{{"serial":"{}","control":"{}","data":{}}}"#,
-                    d.serial,
-                    d.control_port,
-                    match &d.data_port {
-                        Some(dp) => format!(r#""{}""#, dp),
-                        None => "null".to_string(),
-                    }
+                    r#"{{"serial":"{}","port":"{}"}}"#,
+                    d.serial, d.control_port,
                 )
             })
             .collect();
@@ -27,11 +22,7 @@ pub fn run(json: bool) -> Result<()> {
         }
         let sn_w = devices.iter().map(|d| d.serial.len()).max().unwrap_or(7);
         for d in &devices {
-            let dp = d.data_port.as_deref().unwrap_or("-");
-            println!(
-                "{:<sn_w$}  control={}  data={}",
-                d.serial, d.control_port, dp,
-            );
+            println!("{:<sn_w$}  {}", d.serial, d.control_port);
         }
     }
 

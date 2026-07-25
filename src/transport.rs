@@ -7,7 +7,6 @@ use serialport::{available_ports, SerialPort, SerialPortType, UsbPortInfo};
 pub struct Ppk2DeviceInfo {
     pub serial: String,
     pub control_port: String,
-    pub data_port: Option<String>,
 }
 
 pub struct Ppk2Port {
@@ -211,15 +210,9 @@ pub fn find_ppk2_ports() -> Vec<Ppk2DeviceInfo> {
     for (serial, mut entries) in groups {
         entries.sort_by_key(|(_, iface)| *iface);
         let control_port = entries[0].0.clone();
-        let data_port = if entries.len() > 1 {
-            Some(entries[1].0.clone())
-        } else {
-            None
-        };
         result.push(Ppk2DeviceInfo {
             serial,
             control_port,
-            data_port,
         });
     }
 
