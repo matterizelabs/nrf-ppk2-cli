@@ -1,6 +1,6 @@
 [package]
 name = "ppk2"
-version = "0.1.0"
+version = "0.1.4"
 edition = "2021"
 description = "CLI for Nordic Power Profiler Kit II"
 license = "MIT"

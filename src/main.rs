@@ -18,7 +18,7 @@ use clap::{Parser, Subcommand};
 use error::Result;
 
 #[derive(Parser)]
-#[command(name = "ppk2", about = "Power Profiler Kit II CLI")]
+#[command(name = "ppk2", about = "Power Profiler Kit II CLI", version = env!("GIT_VERSION"))]
 struct Cli {
     #[arg(short = 'p', long, help = "Serial port path")]
     port: Option<String>,
