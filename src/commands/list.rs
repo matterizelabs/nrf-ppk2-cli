@@ -7,12 +7,7 @@ pub fn run(json: bool) -> Result<()> {
     if json {
         let entries: Vec<String> = devices
             .iter()
-            .map(|d| {
-                format!(
-                    r#"{{"serial":"{}","port":"{}"}}"#,
-                    d.serial, d.control_port,
-                )
-            })
+            .map(|d| format!(r#"{{"serial":"{}","port":"{}"}}"#, d.serial, d.control_port,))
             .collect();
         println!("[{}]", entries.join(","));
     } else {

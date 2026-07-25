@@ -66,11 +66,7 @@ fn list_shows_device() {
         "serial should not be unknown: {}",
         text
     );
-    assert!(
-        text.contains("/dev/"),
-        "should show device port: {}",
-        text
-    );
+    assert!(text.contains("/dev/"), "should show device port: {}", text);
 }
 
 #[test]
