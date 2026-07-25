@@ -30,7 +30,7 @@ mod unix {
         Config::state_dir().join(serial).join("daemon.sock")
     }
 
-    pub fn run_daemon(port_path: &str, serial: &str) -> Result<()> {
+    pub fn run_daemon(port_path: &str, serial: &str, rate: Option<u32>) -> Result<()> {
         let sock_path = socket_path(serial);
         if let Some(parent) = sock_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -56,7 +56,7 @@ mod unix {
         let port = port_path.to_string();
         let sn = serial.to_string();
         let handle = std::thread::spawn(move || {
-            if let Err(e) = measure_loop(&port, &sn, &state_m) {
+            if let Err(e) = measure_loop(&port, &sn, &state_m, rate) {
                 eprintln!("daemon measure error: {}", e);
             }
             state_m.running.store(false, Ordering::SeqCst);
@@ -167,7 +167,7 @@ mod unix {
         }
     }
 
-    fn measure_loop(port_path: &str, serial: &str, state: &SharedState) -> Result<()> {
+    fn measure_loop(port_path: &str, serial: &str, state: &SharedState, rate: Option<u32>) -> Result<()> {
         let config = Config::load()?;
         let mut device = Ppk2Device::open(port_path)?;
 
@@ -187,8 +187,14 @@ mod unix {
 
         device.start_measurement()?;
 
+        let mut downsampler = rate.map(crate::downsample::Downsampler::new);
+        let sample_rate = downsampler
+            .as_ref()
+            .map(|d| d.actual_rate())
+            .unwrap_or(100_000);
+
         let mut autosave = if config.autosave.enabled {
-            Some(Autosave::new(serial, &config.autosave, 100_000)?)
+            Some(Autosave::new(serial, &config.autosave, sample_rate)?)
         } else {
             None
         };
@@ -206,9 +212,20 @@ mod unix {
                     let mut converted: Vec<(f64, u8)> = Vec::new();
                     for sample in samples {
                         match device.convert_sample(&sample) {
-                            Ok(ua) => converted.push((ua, sample.logic)),
+                            Ok(ua) => {
+                                if let Some(ref mut ds) = downsampler {
+                                    if let Some((avg_ua, bits)) = ds.feed(ua, sample.logic) {
+                                        converted.push((avg_ua, bits));
+                                    }
+                                } else {
+                                    converted.push((ua, sample.logic));
+                                }
+                            }
                             Err(e) => eprintln!("conversion error: {}", e),
                         }
+                    }
+                    if converted.is_empty() {
+                        continue;
                     }
                     {
                         let mut stats = state.stats.lock().unwrap();
@@ -231,6 +248,25 @@ mod unix {
                 }
                 Ok(None) => continue,
                 Err(_) => break,
+            }
+        }
+
+        if let Some(ref ds) = downsampler {
+            if let Some((avg_ua, bits)) = ds.flush() {
+                {
+                    let mut stats = state.stats.lock().unwrap();
+                    stats.count += 1;
+                    stats.sum += avg_ua;
+                    if avg_ua < stats.min {
+                        stats.min = avg_ua;
+                    }
+                    if avg_ua > stats.max {
+                        stats.max = avg_ua;
+                    }
+                }
+                if let Some(ref mut asv) = autosave {
+                    asv.push((avg_ua as f32, bits))?;
+                }
             }
         }
 
@@ -289,7 +325,7 @@ mod windows {
         PathBuf::from(format!(r"\\.\pipe\ppk2-{}", serial))
     }
 
-    pub fn run_daemon(_port_path: &str, serial: &str) -> Result<()> {
+    pub fn run_daemon(_port_path: &str, serial: &str, _rate: Option<u32>) -> Result<()> {
         println!("{}", socket_path(serial).display());
         println!("{}", std::process::id());
         Ok(())

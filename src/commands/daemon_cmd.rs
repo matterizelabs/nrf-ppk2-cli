@@ -21,14 +21,14 @@ pub fn run_start(json: bool, port: Option<&str>, serial: Option<&str>, rate: Opt
     let sn = resolve_daemon_serial(serial);
     if json {
         let sock_path = daemon::socket_path(&sn);
-        daemon::run_daemon(&port_path, &sn)?;
+        daemon::run_daemon(&port_path, &sn, rate)?;
         println!(
             r#"{{"socket":"{}","pid":{}}}"#,
             sock_path.display(),
             std::process::id()
         );
     } else {
-        daemon::run_daemon(&port_path, &sn)?;
+        daemon::run_daemon(&port_path, &sn, rate)?;
     }
     Ok(())
 }
